@@ -14,7 +14,11 @@ import (
 	"github.com/mmoehabb/maestro/internal/tui"
 )
 
-func Run(ctx context.Context, dir, focus string, output io.Writer) (err error) {
+func Run(ctx context.Context, dir, focus string, output io.Writer) error {
+	return RunSwitch(ctx, dir, focus, "", output)
+}
+
+func RunSwitch(ctx context.Context, dir, focus, target string, output io.Writer) (err error) {
 	if !xterm.IsTerminal(os.Stdin.Fd()) {
 		return errors.New("the TUI needs an interactive terminal; use maestro ls --json for scripts")
 	}
@@ -43,6 +47,8 @@ func Run(ctx context.Context, dir, focus string, output io.Writer) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, r.Close()) }()
-	_, err = tea.NewProgram(tui.New(s, r, focus), tea.WithContext(ctx), tea.WithInput(os.Stdin), tea.WithOutput(output)).Run()
+	model := tui.New(s, r, focus)
+	model.SetSwitchAgent(target)
+	_, err = tea.NewProgram(model, tea.WithContext(ctx), tea.WithInput(os.Stdin), tea.WithOutput(output)).Run()
 	return err
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
 	"github.com/mmoehabb/maestro/internal/git"
+	"github.com/mmoehabb/maestro/internal/handoff"
 	"github.com/mmoehabb/maestro/internal/store"
 	"github.com/mmoehabb/maestro/internal/term"
 )
@@ -51,6 +52,9 @@ type statusMsg struct {
 type stoppedMsg struct{ id int64 }
 
 type Model struct {
+	initialAgent, manualInstruction                           string
+	switcher                                                  *switchDialog
+	history                                                   *historyView
 	service                                                   *core.TaskService
 	runtime                                                   *core.Runtime
 	cfg                                                       config.Config
@@ -98,6 +102,9 @@ func (m *Model) launch(index int, fresh bool) tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.contextMessage(msg) {
+		return m, nil
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -130,7 +137,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if task.Slug == m.focus {
 				m.active = len(m.tabs) - 1
 			}
-			cmds = append(cmds, m.launch(len(m.tabs)-1, false))
+			if task.Slug == m.focus && m.initialAgent != "" {
+				cmds = append(cmds, m.switchTask(task, m.initialAgent, false))
+			} else {
+				cmds = append(cmds, m.launch(len(m.tabs)-1, false))
+			}
 		}
 		if len(m.tabs) == 0 {
 			m.dialog = newDialog(m.cfg, m.service.Repo.DefaultBranch)
@@ -144,6 +155,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				t.pane = msg.pane
 				t.err = msg.err
 				if msg.err == nil {
+					// Start may have completed a persisted pending switch from an earlier run.
+					if m.cfg.Agents[t.task.Agent].ManualPrompt {
+						m.manualInstruction = handoff.Instruction
+					}
 					t.task.Lifecycle = "active"
 					c, r := m.size()
 					_ = t.pane.Resize(c, r)
@@ -177,7 +192,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notify(msg.Err.Error())
 		}
 		for i := range m.tabs {
-			if m.tabs[i].task.ID == msg.TaskID && msg.State != "" {
+			if m.tabs[i].task.ID == msg.TaskID && msg.State != "" && (msg.Pane == nil || msg.Pane == m.tabs[i].pane) {
 				m.tabs[i].state = msg.State
 				if i != m.active && (msg.State == term.Done || msg.State == term.NeedsInput) {
 					m.notify(m.tabs[i].task.Slug + ": " + string(msg.State))
@@ -235,6 +250,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.swallowed = make(map[rune]bool)
 		}
 		m.swallowed[msg.Code] = true
+		if m.switcher != nil {
+			return m, m.switchKey(msg)
+		}
+		if m.history != nil {
+			return m, m.historyKey(msg)
+		}
 		if m.dialog != nil {
 			return m, m.dialogKey(msg)
 		}
@@ -255,7 +276,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "pgdown":
 				m.scroll = max(0, m.scroll-m.height+4)
 			case "y":
-				if len(m.tabs) > 0 && m.tabs[m.active].pane != nil {
+				if len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 					text := strings.Join(m.tabs[m.active].pane.Scrollback(), "\n")
 					m.scroll = 0
 					return m, tea.SetClipboard(text)
@@ -276,6 +297,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "c":
 				m.dialog = newDialog(m.cfg, m.service.Repo.DefaultBranch)
+			case "a":
+				return m, m.openSwitch()
+			case "h":
+				return m, m.openHistory()
+			case "H":
+				if m.manualInstruction != "" {
+					return m, tea.SetClipboard(m.manualInstruction)
+				}
 			case "?":
 				m.help = true
 			case "[":
@@ -321,18 +350,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.swallowed, msg.Code)
 			return m, nil
 		}
-		if !m.prefixed && m.dialog == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && m.tabs[m.active].pane != nil {
+		if !m.prefixed && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Key(uv.Key(msg), true)
 		}
 	case tea.PasteMsg:
+		if m.switcher != nil || m.history != nil {
+			return m, nil
+		}
 		if m.dialog != nil {
 			return m, m.dialogPaste(msg)
 		}
-		if !m.help && m.scroll == 0 && len(m.tabs) > 0 && m.tabs[m.active].pane != nil {
+		if !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
-		if m.dialog != nil || m.help {
+		if m.dialog != nil || m.switcher != nil || m.history != nil || m.help {
 			return m, nil
 		}
 		mouse := msg.Mouse()
@@ -354,7 +386,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scroll = max(0, m.scroll-3)
 			return m, nil
 		}
-		if mouse.Y >= 2 && mouse.Y < m.height-2 && len(m.tabs) > 0 && m.tabs[m.active].pane != nil && m.scroll == 0 {
+		if mouse.Y >= 2 && mouse.Y < m.height-2 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil && m.scroll == 0 {
 			mouse.Y -= 2
 			_, release := msg.(tea.MouseReleaseMsg)
 			_, motion := msg.(tea.MouseMotionMsg)
@@ -373,7 +405,7 @@ func (m *Model) selectTab(i int) {
 
 func (m *Model) forwardKey(msg tea.KeyPressMsg, release bool) {
 	delete(m.swallowed, msg.Code)
-	if len(m.tabs) > 0 && m.tabs[m.active].pane != nil {
+	if len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 		m.tabs[m.active].pane.Key(uv.Key(msg), release)
 	}
 }
@@ -486,11 +518,19 @@ func (m *Model) View() tea.View {
 		}
 	}
 	if m.help {
-		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
+		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
 		cursor = nil
 	}
 	if m.dialog != nil {
 		body = m.dialog.View(cols, rows)
+		cursor = nil
+	}
+	if m.switcher != nil {
+		body = m.switcher.View()
+		cursor = nil
+	}
+	if m.history != nil {
+		body = m.history.View(cols, rows)
 		cursor = nil
 	}
 	lines := strings.Split(body, "\n")
@@ -505,7 +545,7 @@ func (m *Model) View() tea.View {
 	}
 	footer := m.prefix + " ? help · " + m.prefix + " c new · " + m.prefix + " q quit"
 	if m.prefixed {
-		footer = "Prefix: c new · x stop · r resume · R fresh · [ scroll · q quit"
+		footer = "Prefix: a agent · h history · c new · x stop · r resume · R fresh · [ scroll · q quit"
 	}
 	if time.Now().Before(m.toastUntil) {
 		footer = m.toast

@@ -35,8 +35,7 @@ func (g Generic) CreateSession(ctx context.Context, dir string) (string, error) 
 	return id, nil
 }
 
-// DiscoverSession only reads identity metadata; normalized transcripts belong to
-// P2. A unique task worktree is mandatory for matching native sessions safely.
+// DiscoverSession matches identity metadata to a unique task worktree.
 func (g Generic) DiscoverSession(ctx context.Context, dir string, since time.Time) (string, error) {
 	if g.Config.SessionFile != "" {
 		f, err := os.Open(filepath.Join(dir, g.Config.SessionFile))
@@ -91,22 +90,48 @@ func (g Generic) DiscoverSession(ctx context.Context, dir string, since time.Tim
 		}
 		for path, id := range entries {
 			if sameDirectory(path, dir) {
-				return id, nil
+				if filepath.Base(id) != id || strings.ContainsAny(id, "/\\") {
+					continue
+				}
+				if err := ctx.Err(); err != nil {
+					return "", err
+				}
+				created, e := agyCreatedAt(ctx, filepath.Join(home, ".gemini", "antigravity-cli", "brain", id, ".system_generated", "logs", "transcript.jsonl"))
+				if e != nil {
+					continue
+				}
+				// A stale cache entry must never attach a fresh launch to an old session.
+				if !created.IsZero() && !created.Before(since.Add(-time.Second)) {
+					return id, nil
+				}
+
 			}
 		}
 	case "opencode":
 		cmd := exec.CommandContext(ctx, g.Config.Cmd, "session", "list", "--format", "json")
 		cmd.Dir = dir
-		b, err := cmd.Output()
+		cmd.WaitDelay = time.Second
+		var out limitedBuffer
+		cmd.Stdout = &out
+		err := cmd.Run()
+		b := out.Bytes()
 		if err != nil {
-			return "", err
+			id, fallbackErr := discoverOpenCodeDB(ctx, dir, since)
+			if fallbackErr == nil {
+				return id, nil
+			}
+			return "", errors.Join(err, fallbackErr)
 		}
 		var entries []struct {
 			ID, Directory string
 			Created       int64
 		}
 		if err := json.Unmarshal(b, &entries); err != nil {
-			return "", err
+			id, fallbackErr := discoverOpenCodeDB(ctx, dir, since)
+			if fallbackErr == nil {
+				return id, nil
+			}
+			return "", errors.Join(err, fallbackErr)
 		}
 		var id string
 		var latest int64
@@ -228,4 +253,25 @@ func (g Generic) Hints() []string {
 		return g.Config.InputHints
 	}
 	return []string{"allow command?", "approve?", "do you want to proceed?", "allow this command", "permission required"}
+}
+
+// Identity needs only the first timestamp, not a healthy conversation parser.
+func agyCreatedAt(ctx context.Context, path string) (time.Time, error) {
+	if err := ctx.Err(); err != nil {
+		return time.Time{}, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer f.Close()
+	var first map[string]json.RawMessage
+	err = json.NewDecoder(io.LimitReader(f, 8<<20)).Decode(&first)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return time.Time{}, err
+	}
+	return stamp(first["created_at"]), nil
 }

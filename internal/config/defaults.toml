@@ -32,3 +32,28 @@ resume = ["--conversation", "{{.SessionID}}", "{{if .Prompt}}-i{{end}}", "{{.Pro
 cmd = "opencode"
 new = ["{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
 resume = ["--session", "{{.SessionID}}", "{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
+
+[agents.claude]
+cmd = "claude"
+generate_session_id = true
+new = ["--session-id", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+
+[agents.qoder]
+cmd = "qoder"
+generate_session_id = true
+new = ["--session-id", "{{.SessionID}}", "{{if .Prompt}}--prompt-interactive{{end}}", "{{.Prompt}}"]
+resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--prompt-interactive{{end}}", "{{.Prompt}}"]
+
+[agents.kimi]
+cmd = "kimi"
+# --prompt is non-interactive and enables automatic approvals.
+manual_prompt = true
+new = []
+resume = ["--session", "{{.SessionID}}"]
+
+[agents.cursor-agent]
+cmd = "cursor-agent"
+session_create = ["create-chat"]
+new = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]

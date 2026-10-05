@@ -32,6 +32,9 @@ func TestInvalidConfig(t *testing.T) {
 		"default_agent = 'missing'", "prefix_fallback = 'ctrl+m'", "prefix_fallback = 'ctrl+j'", "prefix = 'enter'", "icons = 'typo'", "unknown = true",
 		"[activity]\nidle_after = '0s'", "[worktree]\ncopy = ['../secret']", "[worktree]\ncopy = ['.git/config']",
 		"[agents.codex]\nnew = ['{{']", "[git]\ncleanup = 'force'", "[worktree]\nroot = 'relative'",
+		"[agents.custom]\ncmd = 'custom'\nsession_create = ['create']",
+		"[agents.claude]\nsession_create = ['create']",
+		"[agents.cursor-agent]\nsession_file = 'session-id'",
 	} {
 		t.Run(data, func(t *testing.T) {
 			dir := t.TempDir()

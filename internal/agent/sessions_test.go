@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,6 +37,83 @@ func TestCodexSessionDiscoveryMatchesWorktree(t *testing.T) {
 	cancel()
 	if _, err := discoverCodex(ctx, root, worktree, now); err == nil {
 		t.Fatal("discovery ignored cancellation")
+	}
+}
+
+func TestKimiSessionDiscoveryMatchesWorktree(t *testing.T) {
+	root, worktree, other := t.TempDir(), t.TempDir(), t.TempDir()
+	now := time.Now().UTC()
+	for _, tc := range []struct {
+		id, dir string
+		created time.Time
+	}{
+		{"old", worktree, now.Add(-time.Hour)},
+		{"wanted", worktree, now},
+		{"other", other, now.Add(time.Minute)},
+	} {
+		dir := filepath.Join(root, "workspace", tc.id)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		b, err := json.Marshal(map[string]any{"workDir": tc.dir, "createdAt": tc.created})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "state.json"), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if id, err := discoverKimi(context.Background(), root, worktree, now.Add(-time.Second)); err != nil || id != "wanted" {
+		t.Fatalf("got %q, %v", id, err)
+	}
+	if id, err := discoverKimi(context.Background(), root, worktree, now.Add(time.Hour)); err != nil || id != "" {
+		t.Fatalf("stale session accepted: %q, %v", id, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := discoverKimi(ctx, root, worktree, now); err == nil {
+		t.Fatal("discovery ignored cancellation")
+	}
+}
+
+func TestSessionCreatorProcess(t *testing.T) {
+	if os.Getenv("MAESTRO_SESSION_CREATOR_HELPER") != "1" {
+		return
+	}
+	fmt.Print(os.Getenv("MAESTRO_SESSION_CREATOR_OUTPUT"))
+	if os.Getenv("MAESTRO_SESSION_CREATOR_FAIL") == "1" {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+func TestCreateSession(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MAESTRO_SESSION_CREATOR_HELPER", "1")
+	g := Generic{Name: "custom", Config: config.Agent{Cmd: exe, SessionCreate: []string{"-test.run=^TestSessionCreatorProcess$"}}}
+	for _, output := range []string{"native-id\r\n", "", "two\nlines", "not an id", "\x1b[32mid"} {
+		t.Setenv("MAESTRO_SESSION_CREATOR_OUTPUT", output)
+		id, err := g.CreateSession(context.Background(), t.TempDir())
+		if output == "native-id\r\n" {
+			if err != nil || id != "native-id" {
+				t.Fatal(id, err)
+			}
+		} else if err == nil {
+			t.Fatalf("invalid output accepted: %q", output)
+		}
+	}
+	t.Setenv("MAESTRO_SESSION_CREATOR_FAIL", "1")
+	t.Setenv("MAESTRO_SESSION_CREATOR_OUTPUT", "valid-looking-id")
+	if _, err := g.CreateSession(context.Background(), t.TempDir()); err == nil {
+		t.Fatal("failed creation accepted")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := g.CreateSession(ctx, t.TempDir()); err == nil {
+		t.Fatal("creation ignored cancellation")
 	}
 }
 

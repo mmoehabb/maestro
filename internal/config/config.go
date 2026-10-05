@@ -21,6 +21,8 @@ type Agent struct {
 	New               []string `toml:"new"`
 	Resume            []string `toml:"resume"`
 	GenerateSessionID bool     `toml:"generate_session_id"`
+	SessionCreate     []string `toml:"session_create"`
+	ManualPrompt      bool     `toml:"manual_prompt"`
 	SessionFile       string   `toml:"session_file"`
 	InputHints        []string `toml:"input_hints"`
 }
@@ -139,6 +141,9 @@ func (c Config) Validate() error {
 		}
 		if a.GenerateSessionID && len(a.Resume) == 0 {
 			return fmt.Errorf("agent %s generates session IDs but has no resume arguments", id)
+		}
+		if len(a.SessionCreate) > 0 && (a.GenerateSessionID || a.SessionFile != "" || len(a.Resume) == 0) {
+			return fmt.Errorf("agent %s session_create requires resume arguments and cannot be combined with other session ID sources", id)
 		}
 		if strings.TrimSpace(id) == "" || strings.TrimSpace(a.Cmd) == "" {
 			return fmt.Errorf("agent %q needs a command", id)

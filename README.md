@@ -1,6 +1,6 @@
 # Maestro
 
-> **tmux for coding agents.** Run codex, agy, opencode and friends side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
+> **tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code and Cursor Agent side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
 
 > [!NOTE]
 > P1 is implemented: isolated worktrees, embedded agent terminals, tabs, activity states, persistence and session resume. Context handoff and forge operations arrive in P2/P3. See [docs/PLAN.md](docs/PLAN.md).
@@ -57,7 +57,23 @@ Click tabs to switch. Mouse input within the terminal is forwarded; the wheel en
 
 ### Session resume
 
-Maestro saves native session IDs during execution and resumes by ID without replaying the first prompt. Minimal identity discovery is included for Codex rollout metadata, agy's workspace-to-conversation cache, and OpenCode's JSON session listing. These private formats can change; full transcript adapters and context transfer remain P2. If an existing resumable task has no discoverable ID, Maestro shows an error and offers `prefix R` for an explicit fresh start.
+Built-in presets are available in the new-task picker and through `maestro new -a <agent>`:
+
+| Agent key | Executable | Session identity |
+|---|---|---|
+| `codex` | `codex` | Discovered from rollout metadata |
+| `agy` | `agy` | Discovered from the workspace-to-conversation cache |
+| `opencode` | `opencode` | Discovered from its JSON session listing |
+| `claude` | `claude` | Maestro supplies a UUID using `--session-id` |
+| `qoder` | `qoder` | Maestro supplies a UUID using `--session-id` |
+| `kimi` | `kimi` | Discovered from Kimi Code's `~/.kimi-code/sessions` metadata |
+| `cursor-agent` | `cursor-agent` | Allocated by `cursor-agent create-chat` before launch |
+
+Install and authenticate the chosen CLI separately; `maestro doctor` checks executable availability. Override the preset's `cmd` if your installation uses another executable name, such as `agent` for Cursor or `qodercli` for older Qoder installations. The argument flags must also be supported by that version.
+
+Claude and Cursor accept an initial prompt while remaining interactive. Qoder uses [`--prompt-interactive`](https://docs.qoder.com/cli/cli-reference). Kimi's [`--prompt`](https://github.com/MoonshotAI/kimi-code/blob/main/docs/en/reference/kimi-command.md) runs non-interactively with automatic approvals, so its preset requires manual prompt entry: omit Maestro's `-p` (leave the dialog's first prompt blank) and enter the prompt in the agent pane. Maestro rejects launch-time prompts for this preset before creating a worktree. The Kimi preset targets the current Kimi Code CLI and its `.kimi-code` session layout, not the older Python CLI's `.kimi` storage. Cursor session allocation uses its documented [`create-chat`](https://cursor.com/docs/cli/reference/parameters) command.
+
+Maestro saves native session IDs and resumes by ID without replaying the first prompt. Private metadata formats can change; full transcript adapters and context transfer remain P2. If an existing resumable task has no discoverable ID, Maestro shows an error and offers `prefix R` for an explicit fresh start.
 
 Custom agents can write their ID to a worktree-relative `session_file`, or opt into a generated UUID if they support client-supplied IDs:
 
@@ -72,6 +88,10 @@ input_hints = ["Approve?"]
 ```
 
 Argument templates render directly into argv; empty arguments are dropped and prompts are never interpreted by a shell. `MAESTRO_TASK` and `MAESTRO_SESSION_ID` are also available to the child process. Stateless custom agents with no resume arguments restart as new processes.
+
+Agents that allocate IDs through a separate command can instead use `session_create = ["create-chat"]`. Maestro runs those literal arguments with the configured executable in the task worktree before the first launch, captures the single ID from stdout, and supplies it as `{{.SessionID}}`. It does not run that command when resuming. This setting requires resume arguments and cannot be combined with `generate_session_id` or `session_file`.
+
+Set `manual_prompt = true` when an agent cannot accept an initial prompt in interactive mode. This rejects launch-time prompts with instructions to enter them in the pane.
 
 Configuration layers are built-in defaults, the global config file, then the main checkout's `.maestro.toml`. The `new` flags override the corresponding task choices. Agent tables merge by key, so overriding `cmd` preserves the default argument templates. See [the default config](internal/config/defaults.toml) for supported settings.
 

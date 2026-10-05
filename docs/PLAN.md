@@ -152,7 +152,7 @@ README.md
 ### 1. Config: `internal/config`
 
 #### [NEW] config.go
-Settings are layered: built-in defaults < `~/.config/maestro/config.toml` < `<repo>/.maestro.toml` < CLI flags. **Agents are defined as data**, so you can add Claude Code, Gemini, Aider and others without writing any code. Built-in adapters only add transcript parsing, session discovery and turn-complete detection.
+Settings are layered: built-in defaults < `~/.config/maestro/config.toml` < `<repo>/.maestro.toml` < CLI flags. **Agents are defined as data**, so you can add Gemini, Aider and others without writing any code. Built-in presets include Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code and Cursor Agent. Built-in adapters only add transcript parsing, session discovery and turn-complete detection.
 
 ```toml
 prefix = "ctrl+m"
@@ -191,6 +191,8 @@ new = ["{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
 resume = ["--session", "{{.SessionID}}", "{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
 ```
 (Arguments that render empty are dropped.)
+
+The complete shipped presets are in [`internal/config/defaults.toml`](../internal/config/defaults.toml). Claude Code and Qoder use `generate_session_id` with `--session-id`; Cursor uses `session_create = ["create-chat"]` to allocate a native ID before interactive launch. Kimi Code discovers identity from `.kimi-code/sessions` metadata. Its preset uses `manual_prompt = true` because the CLI's `--prompt` runs non-interactively with automatic approvals; enter the first prompt in the pane. See the [README's agent table](../README.md#session-resume) for executable names and compatibility notes.
 
 ---
 

@@ -27,7 +27,17 @@ func (g Generic) ID() string { return g.Name }
 
 func (g Generic) Detect() (string, error) { return exec.LookPath(g.Config.Cmd) }
 
+func (g Generic) ValidatePrompt(prompt string) error {
+	if prompt != "" && g.Config.ManualPrompt {
+		return fmt.Errorf("agent %s requires manual prompt entry; omit the initial prompt and type it in the agent pane", g.Name)
+	}
+	return nil
+}
+
 func (g Generic) Command(ctx context.Context, spec LaunchSpec) (*exec.Cmd, error) {
+	if err := g.ValidatePrompt(spec.Prompt); err != nil {
+		return nil, err
+	}
 	args := g.Config.New
 	if spec.SessionID != "" && !spec.NewSession {
 		if len(g.Config.Resume) == 0 {

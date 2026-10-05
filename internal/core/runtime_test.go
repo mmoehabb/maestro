@@ -4,11 +4,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/mmoehabb/maestro/internal/app"
 	"github.com/mmoehabb/maestro/internal/config"
@@ -24,6 +27,17 @@ func TestAgentProcess(t *testing.T) {
 	}
 	for i, arg := range os.Args {
 		if arg == "--" {
+			if i+1 < len(os.Args) && os.Args[i+1] == "create-session" {
+				id := uuid.NewString()
+				f, err := os.OpenFile("session-creations", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+				if err != nil {
+					os.Exit(2)
+				}
+				_, _ = fmt.Fprintln(f, id)
+				_ = f.Close()
+				fmt.Println(id)
+				os.Exit(0)
+			}
 			os.Exit(testutil.FakeAgent(os.Args[i+1:]))
 		}
 	}
@@ -31,6 +45,14 @@ func TestAgentProcess(t *testing.T) {
 }
 
 func TestThreeTasksRestoreNativeSessions(t *testing.T) {
+	for _, createCommand := range []bool{false, true} {
+		t.Run(fmt.Sprintf("create-command=%v", createCommand), func(t *testing.T) {
+			testThreeTasksRestoreNativeSessions(t, createCommand)
+		})
+	}
+}
+
+func testThreeTasksRestoreNativeSessions(t *testing.T, createCommand bool) {
 	t.Setenv("MAESTRO_TEST_HELPER", "1")
 	exe, err := os.Executable()
 	if err != nil {
@@ -47,6 +69,12 @@ func TestThreeTasksRestoreNativeSessions(t *testing.T) {
 			t.Fatal(err)
 		}
 		s.Config.Agents["fake"] = config.Agent{Cmd: exe, New: []string{"-test.run=TestAgentProcess", "--", "new", "{{.SessionID}}", "{{.Prompt}}"}, Resume: []string{"-test.run=TestAgentProcess", "--", "resume", "{{.SessionID}}"}, GenerateSessionID: true}
+		if createCommand {
+			preset := s.Config.Agents["fake"]
+			preset.GenerateSessionID = false
+			preset.SessionCreate = []string{"-test.run=^TestAgentProcess$", "--", "create-session"}
+			s.Config.Agents["fake"] = preset
+		}
 		s.Config.Activity.IdleAfter = "80ms"
 		return s
 	}
@@ -135,6 +163,12 @@ func TestThreeTasksRestoreNativeSessions(t *testing.T) {
 		_ = f.Close()
 		if len(launches) != 2 || launches[0][0] != "new" || launches[1][0] != "resume" || launches[0][1] != launches[1][1] || len(launches[1]) != 2 {
 			t.Fatalf("incorrect resume: %#v", launches)
+		}
+		if createCommand {
+			b, err := os.ReadFile(filepath.Join(task.Worktree, "session-creations"))
+			if err != nil || string(b) != launches[0][1]+"\n" {
+				t.Fatalf("session must be created once, before first launch: %q, %v", b, err)
+			}
 		}
 	}
 }

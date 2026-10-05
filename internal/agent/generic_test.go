@@ -49,3 +49,56 @@ func TestBadTemplateAndUnsupportedResume(t *testing.T) {
 		}
 	}
 }
+
+func TestAdditionalAgentCommands(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := config.Load(config.Paths{ConfigFile: filepath.Join(dir, "absent"), DataDir: dir}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const id = "cd830a00-8b2c-4a82-bb4b-56ab89ed5d01"
+	for _, tc := range []struct {
+		name                string
+		newArgs, resumeArgs []string
+		promptFlag          string
+		generated           bool
+	}{
+		{"claude", []string{"--session-id", id}, []string{"--resume", id}, "--", true},
+		{"qoder", []string{"--session-id", id}, []string{"--resume", id}, "--prompt-interactive", true},
+		{"kimi", nil, []string{"--session", id}, "--prompt", false},
+		{"cursor-agent", []string{"--resume", id}, []string{"--resume", id}, "--", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			preset, ok := cfg.Agents[tc.name]
+			if !ok || preset.GenerateSessionID != tc.generated {
+				t.Fatalf("incorrect preset: %+v", preset)
+			}
+			for _, fresh := range []bool{true, false} {
+				for _, prompt := range []string{"", "--help; $(touch nope) 'quoted'\nsecond line"} {
+					g := Generic{Name: tc.name, Config: preset}
+					cmd, err := g.Command(context.Background(), LaunchSpec{Dir: dir, SessionID: id, NewSession: fresh, Prompt: prompt})
+					if tc.name == "kimi" && prompt != "" {
+						if err == nil {
+							t.Fatal("Kimi must reject startup prompts instead of enabling non-interactive automatic approvals")
+						}
+						continue
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					args := tc.resumeArgs
+					if fresh {
+						args = tc.newArgs
+					}
+					want := append([]string{tc.name}, args...)
+					if prompt != "" {
+						want = append(want, tc.promptFlag, prompt)
+					}
+					if !reflect.DeepEqual(cmd.Args, want) || cmd.Dir != dir {
+						t.Fatalf("fresh=%v: got %q, want %q", fresh, cmd.Args, want)
+					}
+				}
+			}
+		})
+	}
+}

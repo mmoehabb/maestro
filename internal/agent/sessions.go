@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -13,6 +14,26 @@ import (
 	"strings"
 	"time"
 )
+
+// CreateSession asks agents such as Cursor to allocate an ID before launch.
+// Arguments are passed directly to the configured executable, without a shell.
+func (g Generic) CreateSession(ctx context.Context, dir string) (string, error) {
+	if len(g.Config.SessionCreate) == 0 {
+		return "", errors.New("no session creation command configured")
+	}
+	cmd := exec.CommandContext(ctx, g.Config.Cmd, g.Config.SessionCreate...)
+	cmd.Dir = dir
+	cmd.WaitDelay = time.Second
+	b, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("agent %s: %w", g.Name, err)
+	}
+	id := strings.TrimSpace(string(b))
+	if id == "" || len(id) > 512 || strings.ContainsAny(id, " \t\r\n\x00\x1b") {
+		return "", fmt.Errorf("agent %s returned an invalid session ID", g.Name)
+	}
+	return id, nil
+}
 
 // DiscoverSession only reads identity metadata; normalized transcripts belong to
 // P2. A unique task worktree is mandatory for matching native sessions safely.
@@ -48,6 +69,8 @@ func (g Generic) DiscoverSession(ctx context.Context, dir string, since time.Tim
 		return "", err
 	}
 	switch g.Name {
+	case "kimi":
+		return discoverKimi(ctx, filepath.Join(home, ".kimi-code", "sessions"), dir, since)
 	case "codex":
 		root := os.Getenv("CODEX_HOME")
 		if root == "" {
@@ -95,6 +118,48 @@ func (g Generic) DiscoverSession(ctx context.Context, dir string, since time.Tim
 		return id, nil
 	}
 	return "", nil
+}
+
+// Kimi Code writes state.json under sessions/<workDirKey>/<sessionId>/.
+// Only identity metadata is read; conversation content stays with the agent.
+func discoverKimi(ctx context.Context, root, dir string, since time.Time) (string, error) {
+	var id string
+	var latest time.Time
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Name() != "state.json" {
+			return nil
+		}
+		f, err := os.Open(path)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		var state struct {
+			WorkDir   string
+			CreatedAt time.Time
+		}
+		// A file can be observed mid-write; retry on the next discovery tick.
+		if json.NewDecoder(io.LimitReader(f, 2<<20)).Decode(&state) != nil {
+			return nil
+		}
+		if state.WorkDir != "" && sameDirectory(state.WorkDir, dir) && !state.CreatedAt.Before(since.Add(-time.Second)) && state.CreatedAt.After(latest) {
+			id, latest = filepath.Base(filepath.Dir(path)), state.CreatedAt
+		}
+		return nil
+	})
+	return id, err
 }
 
 func sameDirectory(a, b string) bool {

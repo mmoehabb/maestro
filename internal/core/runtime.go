@@ -106,6 +106,12 @@ func (r *Runtime) Start(task store.Task, cols, rows int, fresh bool) (*term.Pane
 	if newSession && cfg.GenerateSessionID {
 		nativeID = uuid.NewString()
 	}
+	if newSession && len(cfg.SessionCreate) > 0 {
+		nativeID, err = g.CreateSession(ctx, task.Worktree)
+		if err != nil {
+			return nil, fmt.Errorf("create native session: %w", err)
+		}
+	}
 	prompt := ""
 	if newSession {
 		prompt = task.Prompt

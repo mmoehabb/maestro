@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofrs/flock"
 
+	"github.com/mmoehabb/maestro/internal/agent"
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/store"
@@ -108,8 +109,12 @@ func (s *TaskService) create(ctx context.Context, in NewTask) (store.Task, error
 	if in.Agent == "" {
 		in.Agent = s.Config.DefaultAgent
 	}
-	if _, ok := s.Config.Agents[in.Agent]; !ok {
+	preset, ok := s.Config.Agents[in.Agent]
+	if !ok {
 		return store.Task{}, fmt.Errorf("unknown agent %q", in.Agent)
+	}
+	if err := (agent.Generic{Name: in.Agent, Config: preset}).ValidatePrompt(in.Prompt); err != nil {
+		return store.Task{}, err
 	}
 	if in.Base == "" {
 		in.Base = s.Repo.DefaultBranch

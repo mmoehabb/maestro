@@ -1,0 +1,48 @@
+ ♪ maestro /repo
+ ⠋ fix-auth · codex  ✓ add-tui · codex  ⚑ refactor · codex 
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                               ╭───────────────────────────────────────────────────────────────╮                                                
+                                               │                                                               │                                                
+                                               │  New task                                                     │                                                
+                                               │                                                               │                                                
+                                               │  Title                                                        │                                                
+                                               │  > Fix login                                                  │                                                
+                                               │  Base branch                                                  │                                                
+                                               │  > main                                                       │                                                
+                                               │  Agent (←/→)                                                  │                                                
+                                               │  ‹ codex ›  installed                                         │                                                
+                                               │  First prompt                                                 │                                                
+                                               │  > Optional first prompt                                      │                                                
+                                               │                                                               │                                                
+                                               │  Tab next · Enter continue/create · Esc cancel                │                                                
+                                               │                                                               │                                                
+                                               ╰───────────────────────────────────────────────────────────────╯                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+ codex · maestro/fix-auth · +0 −0 · 0 files · ↑0 ↓0 · active
+ctrl+b ? help · ctrl+b c new · ctrl+b q quit

@@ -152,7 +152,7 @@ README.md
 ### 1. Config: `internal/config`
 
 #### [NEW] config.go
-Settings are layered: built-in defaults < `~/.config/maestro/config.toml` < `<repo>/.maestro.toml` < CLI flags. **Agents are defined as data**, so you can add Claude Code, Gemini, Aider and others without writing any code. Built-in adapters only add transcript parsing, session discovery and turn-complete detection.
+Settings are layered: built-in defaults < `~/.config/maestro/config.toml` < `<repo>/.maestro.toml` < CLI flags. **Agents are defined as data**, so you can add Gemini, Aider and others without writing any code. Built-in presets include Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code and Cursor Agent. Built-in adapters only add transcript parsing, session discovery and turn-complete detection.
 
 ```toml
 prefix = "ctrl+m"
@@ -191,6 +191,8 @@ new = ["{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
 resume = ["--session", "{{.SessionID}}", "{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
 ```
 (Arguments that render empty are dropped.)
+
+The complete shipped presets are in [`internal/config/defaults.toml`](../internal/config/defaults.toml). Claude Code and Qoder use `generate_session_id` with `--session-id`; Cursor uses `session_create = ["create-chat"]` to allocate a native ID before interactive launch. Kimi Code discovers identity from `.kimi-code/sessions` metadata. Its preset uses `manual_prompt = true` because the CLI's `--prompt` runs non-interactively with automatic approvals; enter the first prompt in the pane. See the [README's agent table](../README.md#session-resume) for executable names and compatibility notes.
 
 ---
 
@@ -430,6 +432,26 @@ maestro completion <shell>
 ---
 
 ## Roadmap
+
+### Implementation status
+
+P0 and P1 are implemented. P1 includes:
+
+- Layered TOML defaults/global/repo configuration, validation, and per-task CLI overrides.
+- SQLite migration with WAL and foreign keys; project/task/session persistence, atomic creation/start events, exit status and terminal fallback history.
+- Main/linked-worktree project identity, collision-resistant data paths, branch/worktree creation, safe file copies, setup commands and shared handoff exclusion.
+- Generic agent detection and shell-free new/resume argument rendering; generated IDs and session-ID files for custom agents, plus minimal native identity discovery for Codex, agy and OpenCode.
+- PTY/ConPTY panes behind an emulator interface, ANSI/alternate-screen rendering, keyboard negotiation and kitty/legacy forwarding, bracketed paste, mouse passthrough, resize and bounded scrollback.
+- Tabs, status bar, agent picker/new-task dialog, help, scroll/copy mode, activity icons, background notifications and periodic Git status refresh.
+- TUI lifetime locking, launch/stop/restart, three-tab restoration by native session ID, graceful stop with process-tree cleanup, and explicit fresh-start recovery when resume metadata is missing.
+- Functional root/open/new/ls/config/config-path/doctor commands; interactive doctor keyboard negotiation and agent-version checks.
+- Tests for the foundation, real PTY processes, keyboard encoding, session identity matching, three-task stop/reopen/resume and UI snapshots at 80×24 and 160×48.
+
+Implementation adjustments: minimal native session **identity** discovery was brought forward from P2 to satisfy P1 resume; full transcript adapters remain P2. `new` provisions tasks for scripts, while root/open and the TUI dialog launch agents. Nerd Font availability cannot reliably be inferred from glyph width, so the default conservatively falls back to Unicode. GitHub auth probes and cleanup/archive/reopen remain P3.
+
+The dependency versions already selected in `go.mod` require Go 1.26, superseding the original Go 1.24 stack entry above.
+
+Verification includes race-enabled tests, vet, lint with golangci-lint v2.9.0, module tidiness and Linux/Windows/macOS builds. A Linux terminal smoke test exercised three tabs, Working → Done, NeedsInput, creating a fourth task through the dialog, listing while locked, quitting and reopening with the same native IDs, fallback prefix, and simulated enhanced-keyboard replies. Native Windows/macOS execution and authenticated real-agent conversations remain manual verification items. CI now pins a Go 1.26-compatible linter.
 
 ```mermaid
 flowchart LR

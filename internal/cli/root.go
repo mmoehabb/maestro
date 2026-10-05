@@ -1,8 +1,6 @@
 // Package cli defines Maestro's command-line interface.
 //
-// In P0 only `version` is functional; every other command is registered so the
-// CLI surface matches docs/PLAN.md, but returns ErrNotImplemented naming the
-// phase that delivers it.
+// Commands not yet delivered return ErrNotImplemented naming their phase.
 package cli
 
 import (
@@ -13,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mmoehabb/maestro/internal/app"
 	"github.com/mmoehabb/maestro/internal/version"
 )
 
@@ -36,7 +35,7 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
-		RunE:          notImplemented("P1"), // opens the TUI
+		RunE:          func(cmd *cobra.Command, _ []string) error { return app.Run(cmd.Context(), ".", "", cmd.OutOrStdout()) },
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
@@ -44,9 +43,11 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 
 	root.AddCommand(
 		newVersionCmd(),
-		&cobra.Command{Use: "new <title>", Short: "Create a new task", Args: cobra.ExactArgs(1), RunE: notImplemented("P1")},
-		&cobra.Command{Use: "ls", Aliases: []string{"list"}, Short: "List tasks", Args: cobra.NoArgs, RunE: notImplemented("P1")},
-		&cobra.Command{Use: "open <task>", Short: "Open the TUI focused on a task", Args: cobra.ExactArgs(1), RunE: notImplemented("P1")},
+		newTaskCmd(),
+		newListCmd(),
+		&cobra.Command{Use: "open <task>", Short: "Open the TUI focused on a task", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+			return app.Run(cmd.Context(), ".", args[0], cmd.OutOrStdout())
+		}},
 		&cobra.Command{Use: "switch <task>", Short: "Switch the agent of a task (with context handoff)", Args: cobra.ExactArgs(1), RunE: notImplemented("P2")},
 		&cobra.Command{Use: "history <task>", Short: "Show a task's timeline and transcript", Args: cobra.ExactArgs(1), RunE: notImplemented("P2")},
 		&cobra.Command{Use: "push <task>", Short: "Push a task's branch", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
@@ -55,8 +56,8 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		&cobra.Command{Use: "archive <task>", Short: "Archive a task and clean its worktree", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
 		&cobra.Command{Use: "reopen <task>", Short: "Reopen an archived task", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
 		&cobra.Command{Use: "rm <task>", Short: "Delete a task and its history", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
-		&cobra.Command{Use: "doctor", Short: "Diagnose agents, git, auth and terminal capabilities", Args: cobra.NoArgs, RunE: notImplemented("P1")},
-		&cobra.Command{Use: "config", Short: "Show or edit configuration", RunE: notImplemented("P1")},
+		newDoctorCmd(),
+		newConfigCmd(),
 	)
 	return root
 }

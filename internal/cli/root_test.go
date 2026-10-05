@@ -2,9 +2,16 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/adrg/xdg"
+
+	"github.com/mmoehabb/maestro/internal/store"
+	"github.com/mmoehabb/maestro/internal/testutil"
 )
 
 func run(t *testing.T, args ...string) (string, error) {
@@ -42,7 +49,6 @@ func TestHelpListsPlannedCommands(t *testing.T) {
 
 func TestStubsReturnNotImplemented(t *testing.T) {
 	cases := map[string][]string{
-		"P1": {"ls"},
 		"P2": {"switch", "x"},
 		"P3": {"merge", "x"},
 	}
@@ -70,5 +76,36 @@ func TestCompletion(t *testing.T) {
 	}
 	if !strings.Contains(out, "maestro") {
 		t.Error("bash completion script does not mention maestro")
+	}
+}
+
+func TestNewAndList(t *testing.T) {
+	dir := testutil.Repo(t)
+	t.Chdir(dir)
+	oldConfig, oldData := xdg.ConfigHome, xdg.DataHome
+	xdg.ConfigHome, xdg.DataHome = t.TempDir(), t.TempDir()
+	t.Cleanup(func() { xdg.ConfigHome, xdg.DataHome = oldConfig, oldData })
+	out, err := run(t, "ls", "--json")
+	if err != nil || strings.TrimSpace(out) != "[]" {
+		t.Fatalf("empty list: %q %v", out, err)
+	}
+	out, err = run(t, "new", "Fix login", "-a", "agy", "-b", "main", "-p", "prompt with spaces")
+	if err != nil || !strings.Contains(out, "Created fix-login") {
+		t.Fatalf("new: %q %v", out, err)
+	}
+	out, err = run(t, "ls", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tasks []store.Task
+	if err := json.Unmarshal([]byte(out), &tasks); err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].Agent != "agy" || tasks[0].Prompt != "prompt with spaces" {
+		t.Fatalf("bad tasks: %+v", tasks)
+	}
+	out, err = run(t, "config", "path")
+	if err != nil || strings.TrimSpace(out) != filepath.Join(xdg.ConfigHome, "maestro", "config.toml") {
+		t.Fatalf("config path: %q %v", out, err)
 	}
 }

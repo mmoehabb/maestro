@@ -1,0 +1,59 @@
+prefix = "ctrl+m"
+prefix_fallback = "ctrl+b"
+icons = "nerd"
+theme = "auto"
+default_agent = "codex"
+
+[activity]
+idle_after = "2s"
+notify_on = ["done", "needs_input"]
+
+[worktree]
+root = ""
+branch_prefix = "maestro/"
+copy = [".env", ".env.local"]
+setup = []
+
+[git]
+merge_method = "squash"
+cleanup = "ask"
+
+[agents.codex]
+cmd = "codex"
+new = ["{{.Prompt}}"]
+resume = ["resume", "{{.SessionID}}", "{{.Prompt}}"]
+
+[agents.agy]
+cmd = "agy"
+new = ["{{if .Prompt}}-i{{end}}", "{{.Prompt}}"]
+resume = ["--conversation", "{{.SessionID}}", "{{if .Prompt}}-i{{end}}", "{{.Prompt}}"]
+
+[agents.opencode]
+cmd = "opencode"
+new = ["{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
+resume = ["--session", "{{.SessionID}}", "{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
+
+[agents.claude]
+cmd = "claude"
+generate_session_id = true
+new = ["--session-id", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+
+[agents.qoder]
+cmd = "qoder"
+generate_session_id = true
+new = ["--session-id", "{{.SessionID}}", "{{if .Prompt}}--prompt-interactive{{end}}", "{{.Prompt}}"]
+resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--prompt-interactive{{end}}", "{{.Prompt}}"]
+
+[agents.kimi]
+cmd = "kimi"
+# --prompt is non-interactive and enables automatic approvals.
+manual_prompt = true
+new = []
+resume = ["--session", "{{.SessionID}}"]
+
+[agents.cursor-agent]
+cmd = "cursor-agent"
+session_create = ["create-chat"]
+new = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]

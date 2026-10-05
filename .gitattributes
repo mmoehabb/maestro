@@ -1,0 +1,2 @@
+# Golden snapshots are compared byte-for-byte with LF-rendered views.
+internal/tui/testdata/*.golden text eol=lf

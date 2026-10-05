@@ -2,6 +2,7 @@ BINARY  := maestro
 PKG     := github.com/mmoehabb/maestro
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X $(PKG)/internal/version.Version=$(VERSION)
+GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.9.0
 
 .PHONY: build run test lint fmt tidy snapshot clean
 
@@ -15,10 +16,10 @@ test:
 	go test -race -count=1 ./...
 
 lint:
-	golangci-lint run
+	$(GOLANGCI_LINT) run
 
 fmt:
-	golangci-lint fmt
+	$(GOLANGCI_LINT) fmt
 
 tidy:
 	go mod tidy

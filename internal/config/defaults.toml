@@ -1,0 +1,34 @@
+prefix = "ctrl+m"
+prefix_fallback = "ctrl+b"
+icons = "nerd"
+theme = "auto"
+default_agent = "codex"
+
+[activity]
+idle_after = "2s"
+notify_on = ["done", "needs_input"]
+
+[worktree]
+root = ""
+branch_prefix = "maestro/"
+copy = [".env", ".env.local"]
+setup = []
+
+[git]
+merge_method = "squash"
+cleanup = "ask"
+
+[agents.codex]
+cmd = "codex"
+new = ["{{.Prompt}}"]
+resume = ["resume", "{{.SessionID}}", "{{.Prompt}}"]
+
+[agents.agy]
+cmd = "agy"
+new = ["{{if .Prompt}}-i{{end}}", "{{.Prompt}}"]
+resume = ["--conversation", "{{.SessionID}}", "{{if .Prompt}}-i{{end}}", "{{.Prompt}}"]
+
+[agents.opencode]
+cmd = "opencode"
+new = ["{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]
+resume = ["--session", "{{.SessionID}}", "{{if .Prompt}}--prompt{{end}}", "{{.Prompt}}"]

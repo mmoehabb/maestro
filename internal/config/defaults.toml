@@ -3,6 +3,7 @@ prefix_fallback = "ctrl+b"
 icons = "nerd"
 theme = "auto"
 default_agent = "codex"
+editor = ""
 
 [activity]
 idle_after = "2s"

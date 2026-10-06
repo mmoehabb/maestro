@@ -121,6 +121,11 @@ func TestPrefixEnterAndTabRouting(t *testing.T) {
 	if m.dialog != nil {
 		t.Fatal("dialog did not cancel")
 	}
+	press('m', tea.ModCtrl)
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'e'})
+	if cmd == nil {
+		t.Fatal("expected editor command on prefix e")
+	}
 }
 
 func TestIconsAndOverflow(t *testing.T) {

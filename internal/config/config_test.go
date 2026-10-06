@@ -9,7 +9,7 @@ import (
 func TestLayers(t *testing.T) {
 	dir := t.TempDir()
 	paths := Paths{ConfigFile: filepath.Join(dir, "global.toml"), DataDir: dir}
-	if err := os.WriteFile(paths.ConfigFile, []byte("default_agent = 'custom'\n[agents.custom]\ncmd = 'custom-agent'\nnew = ['{{.Prompt}}']\n[agents.codex]\ncmd = 'global-codex'\n"), 0o600); err != nil {
+	if err := os.WriteFile(paths.ConfigFile, []byte("default_agent = 'custom'\neditor = 'nvim'\n[agents.custom]\ncmd = 'custom-agent'\nnew = ['{{.Prompt}}']\n[agents.codex]\ncmd = 'global-codex'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".maestro.toml"), []byte("[agents.codex]\ncmd = 'local-codex'\n[worktree]\ncopy = []\n"), 0o600); err != nil {
@@ -19,7 +19,7 @@ func TestLayers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.DefaultAgent != "custom" || c.Agents["codex"].Cmd != "local-codex" || len(c.Agents["codex"].Resume) != 3 {
+	if c.DefaultAgent != "custom" || c.Editor != "nvim" || c.Agents["codex"].Cmd != "local-codex" || len(c.Agents["codex"].Resume) != 3 {
 		t.Fatalf("bad merge: %+v", c)
 	}
 	if len(c.Worktree.Copy) != 0 || c.Worktree.Root != filepath.Join(dir, "worktrees") {

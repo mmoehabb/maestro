@@ -18,9 +18,9 @@ import (
 // ErrNotImplemented is returned by commands scheduled for a later phase.
 var ErrNotImplemented = errors.New("not implemented yet")
 
-func notImplemented(phase string) func(*cobra.Command, []string) error {
+func notImplemented() func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, _ []string) error {
-		return fmt.Errorf("%q: %w (planned for %s, see docs/PLAN.md)", cmd.CommandPath(), ErrNotImplemented, phase)
+		return fmt.Errorf("%q: %w (planned for %s, see docs/PLAN.md)", cmd.CommandPath(), ErrNotImplemented, "P3")
 	}
 }
 
@@ -48,14 +48,14 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		&cobra.Command{Use: "open <task>", Short: "Open the TUI focused on a task", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 			return app.Run(cmd.Context(), ".", args[0], cmd.OutOrStdout())
 		}},
-		&cobra.Command{Use: "switch <task>", Short: "Switch the agent of a task (with context handoff)", Args: cobra.ExactArgs(1), RunE: notImplemented("P2")},
-		&cobra.Command{Use: "history <task>", Short: "Show a task's timeline and transcript", Args: cobra.ExactArgs(1), RunE: notImplemented("P2")},
-		&cobra.Command{Use: "push <task>", Short: "Push a task's branch", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
-		&cobra.Command{Use: "pr <task>", Short: "Create or open a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
-		&cobra.Command{Use: "merge <task>", Short: "Merge a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
-		&cobra.Command{Use: "archive <task>", Short: "Archive a task and clean its worktree", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
-		&cobra.Command{Use: "reopen <task>", Short: "Reopen an archived task", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
-		&cobra.Command{Use: "rm <task>", Short: "Delete a task and its history", Args: cobra.ExactArgs(1), RunE: notImplemented("P3")},
+		newSwitchCmd(),
+		newHistoryCmd(),
+		&cobra.Command{Use: "push <task>", Short: "Push a task's branch", Args: cobra.ExactArgs(1), RunE: notImplemented()},
+		&cobra.Command{Use: "pr <task>", Short: "Create or open a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented()},
+		&cobra.Command{Use: "merge <task>", Short: "Merge a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented()},
+		newLifecycleCmd("archive"),
+		newLifecycleCmd("reopen"),
+		newLifecycleCmd("rm"),
 		newDoctorCmd(),
 		newConfigCmd(),
 	)

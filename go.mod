@@ -2,7 +2,10 @@ module github.com/mmoehabb/maestro
 
 go 1.26.0
 
-require github.com/spf13/cobra v1.10.2
+require (
+	github.com/fsnotify/fsnotify v1.9.0
+	github.com/spf13/cobra v1.10.2
+)
 
 require github.com/atotto/clipboard v0.1.4 // indirect
 

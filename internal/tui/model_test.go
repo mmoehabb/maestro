@@ -156,4 +156,3 @@ func TestPrefixSuspendAndShell(t *testing.T) {
 		t.Fatal("expected exec cmd for shell")
 	}
 }
-

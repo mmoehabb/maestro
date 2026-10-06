@@ -165,3 +165,90 @@ func TestPane(t *testing.T) {
 		t.Fatal(s)
 	}
 }
+
+func TestNativeActivityPrecedence(t *testing.T) {
+	now := time.Now()
+	a := Activity{State: Starting, IdleAfter: time.Millisecond, Hints: []string{"approve?"}}
+	a.NativeEvent("started")
+	a.Output([]byte("tool working"), now)
+	a.Tick(now.Add(time.Hour))
+	a.Complete()
+	if a.State != Working {
+		t.Fatal("silence/BEL completed native turn", a.State)
+	}
+	a.Output([]byte("approve?"), now)
+	if a.State != NeedsInput {
+		t.Fatal("approval lost")
+	}
+	a.NativeEvent("done")
+	if a.State != Done {
+		t.Fatal("native completion ignored")
+	}
+	a.Output([]byte("repaint"), now)
+	if a.State != Done {
+		t.Fatal("repaint restarted completed turn")
+	}
+	a.NativeEvent("started")
+	a.NativeEvent("unavailable")
+	a.Tick(time.Now().Add(time.Hour))
+	if a.State != Done {
+		t.Fatal("fallback not restored")
+	}
+	a.State = Exited
+	a.NativeEvent("started")
+	if a.State != Exited {
+		t.Fatal("native event resurrected exited process")
+	}
+}
+
+func TestRecoveredNativeActivityPreservesApproval(t *testing.T) {
+	for _, state := range []State{Working, Done, NeedsInput, Exited, Crashed} {
+		a := Activity{State: state, IdleAfter: time.Millisecond}
+		a.NativeEvent("restored_started")
+		a.Tick(time.Now().Add(time.Hour))
+		want := state
+		if state == Done {
+			want = Working
+		}
+		if a.State != want {
+			t.Fatalf("%s recovered as %s", state, a.State)
+		}
+		if state != Exited && state != Crashed && !a.NativeWorking {
+			t.Fatal("native activity not restored")
+		}
+	}
+}
+
+func TestRecoveredIdleDoesNotCompleteNewInput(t *testing.T) {
+	a := Activity{State: Working}
+	a.NativeEvent("restored_idle")
+	if a.State != Working || !a.Native || a.NativeWorking {
+		t.Fatal(a)
+	}
+	a.State = Done
+	a.NativeEvent("restored_idle")
+	a.Output([]byte("repaint"), time.Now())
+	if a.State != Done {
+		t.Fatal("recovered completion lost on repaint", a)
+	}
+}
+
+func TestDelayedNativeStartPreservesApproval(t *testing.T) {
+	now := time.Now()
+	a := Activity{State: Working, IdleAfter: time.Millisecond, Hints: []string{"approve?"}}
+	a.Output([]byte("Approve?"), now)
+	prompt := a.tail
+	a.NativeEvent("started")
+	a.Tick(now.Add(time.Hour))
+	if a.State != NeedsInput || a.tail != prompt || !a.NativeWorking {
+		t.Fatalf("delayed start lost approval: %+v", a)
+	}
+	a.Input(now)
+	if a.State != Working || a.tail != "" {
+		t.Fatalf("approval response did not resume work: %+v", a)
+	}
+	a.NativeEvent("done")
+	if a.State != Done {
+		t.Fatal("native completion ignored")
+	}
+}

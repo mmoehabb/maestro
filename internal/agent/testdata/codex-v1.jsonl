@@ -1,0 +1,10 @@
+{"timestamp":"2026-10-05T12:00:00Z","type":"session_meta","payload":{"id":"codex-one","cwd":"/fixture","cli_version":"fixture-v1"}}
+{"timestamp":"2026-10-05T12:00:01Z","type":"event_msg","payload":{"type":"task_started","turn_id":"one"}}
+{"timestamp":"2026-10-05T12:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Fix the login bug."}]}}
+{"timestamp":"2026-10-05T12:00:01Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"Do not import me"}]}}
+{"timestamp":"2026-10-05T12:00:02Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"{\"cmd\":\"go test ./...\"}","call_id":"call-one"}}
+{"timestamp":"2026-10-05T12:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-one","output":"PASS"}}
+{"timestamp":"2026-10-05T12:00:04Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Fixed the login bug."}]}}
+{"timestamp":"2026-10-05T12:00:04Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"one","last_agent_message":"Fixed the login bug."}}
+{"timestamp":"2026-10-05T12:00:05Z","type":"event_msg","payload":{"type":"task_started","turn_id":"two"}}
+{"timestamp":"2026-10-05T12:00:06Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"two"}}

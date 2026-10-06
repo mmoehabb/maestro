@@ -138,3 +138,22 @@ func TestIconsAndOverflow(t *testing.T) {
 		t.Fatal("active tab hidden", got)
 	}
 }
+
+func TestPrefixSuspendAndShell(t *testing.T) {
+	m := testModel(t)
+	_, _ = m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	if !m.prefixed {
+		t.Fatal("expected prefixed state")
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'z'})
+	if cmd == nil {
+		t.Fatal("expected tea.Suspend cmd")
+	}
+
+	_, _ = m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	_, cmd = m.Update(tea.KeyPressMsg{Code: 't'})
+	if cmd == nil {
+		t.Fatal("expected exec cmd for shell")
+	}
+}
+

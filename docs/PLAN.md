@@ -406,7 +406,8 @@ The active tab is highlighted with a rounded underline, inactive tabs are dimmed
 | `prefix m` | Merge PR (squash) | `prefix n` | Edit task notes |
 | `prefix [` | Scroll / copy mode | `prefix ,` | Rename task |
 | `prefix &` | Archive task | `prefix q` | Quit (agents stop; resumed next launch) |
-| `prefix prefix` | Send the prefix key itself to the agent | `prefix s` | Toggle tabs / sidebar layout |
+| `prefix z` | Suspend app | `prefix s` | Toggle tabs / sidebar layout |
+| `prefix t` | Open shell in task directory | `prefix prefix` | Send the prefix key itself to the agent |
 
 Mouse: click a tab to switch, wheel scrolls back, drag a tab to reorder. Themes: built-in `auto` (detects dark/light), Catppuccin and Tokyo Night palettes, plus user-defined themes.
 

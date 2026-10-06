@@ -34,6 +34,10 @@ maestro               # restore all tasks and start/resume their agents
 maestro open fix-login # restore tabs, focused on this task
 maestro ls
 maestro ls --all --json
+maestro tabs --archived # list archived tabs (tabs is an alias for ls)
+maestro archive fix-login
+maestro reopen fix-login
+maestro rm fix-login    # delete an archived task and its saved history
 maestro switch fix-login -a agy # open the TUI and hand off this task
 maestro history fix-login
 maestro history fix-login --json
@@ -53,6 +57,7 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix h` | Task timeline and expandable conversation history |
 | `prefix H` | Copy the handoff instruction for manual-prompt agents |
 | `prefix c` | New task: title, base branch, agent and prompt |
+| `prefix d` | Archive the current tab and stop its agent |
 | `prefix x`, `prefix r` | Stop, restart/resume the agent |
 | `prefix R` | Explicitly start a fresh session |
 | `prefix [` | Scroll history with j/k, arrows and page keys; y copies history |
@@ -60,6 +65,24 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix q` | Stop agents, save and quit |
 
 Click tabs to switch. Mouse input within the terminal is forwarded; the wheel enters Maestro's scrollback. Background panes keep processing output. Runtime icons show Starting, Working, Done, NeedsInput, Exited and Crashed. Done uses native turn signals when available. A recognized native turn stays Working through silent tool execution; terminal notifications and the configurable quiet timer serve as fallbacks when native monitoring is unavailable. These fallbacks are heuristics, not proof that a long-running tool has finished. Prompt hints also use heuristics. `icons = "nerd"` conservatively uses Unicode glyphs because terminal glyph width does not reliably identify installed fonts; `ascii` uses ASCII runtime icons.
+
+### Archive and delete tabs
+
+`maestro archive <task>` hides a task from the tab bar and default listings.
+Inside the TUI, `prefix d` stops the current agent, saves its final history, and
+archives the tab. Worktrees, branches, session identity, and saved history are
+preserved. `maestro reopen <task>` makes the tab available on the next launch.
+
+`maestro tabs` (also `ls` or `list`) lists unarchived tasks. Use `--all` to include
+archived tasks, `--archived` to show only archived tasks, and `--json` for scripts.
+These listings remain available while the TUI is running.
+
+`maestro rm <task>` (also `delete`) permanently deletes an archived task and all
+its saved Maestro history. It refuses unarchived tasks. The Git worktree and
+branch remain on disk; this command does not clean them up or delete the agent's
+own logs. Retained branches/worktrees must be dealt with before reusing the same
+task slug. Quit the TUI before using CLI archive, reopen, or delete commands,
+since the TUI holds the project lock.
 
 ### Session resume
 

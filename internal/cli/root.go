@@ -53,9 +53,9 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		&cobra.Command{Use: "push <task>", Short: "Push a task's branch", Args: cobra.ExactArgs(1), RunE: notImplemented()},
 		&cobra.Command{Use: "pr <task>", Short: "Create or open a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented()},
 		&cobra.Command{Use: "merge <task>", Short: "Merge a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented()},
-		&cobra.Command{Use: "archive <task>", Short: "Archive a task and clean its worktree", Args: cobra.ExactArgs(1), RunE: notImplemented()},
-		&cobra.Command{Use: "reopen <task>", Short: "Reopen an archived task", Args: cobra.ExactArgs(1), RunE: notImplemented()},
-		&cobra.Command{Use: "rm <task>", Short: "Delete a task and its history", Args: cobra.ExactArgs(1), RunE: notImplemented()},
+		newLifecycleCmd("archive"),
+		newLifecycleCmd("reopen"),
+		newLifecycleCmd("rm"),
 		newDoctorCmd(),
 		newConfigCmd(),
 	)

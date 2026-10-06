@@ -2,9 +2,12 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestPersistenceConstraintsAndHistory(t *testing.T) {
@@ -72,22 +75,97 @@ func TestPersistenceConstraintsAndHistory(t *testing.T) {
 	if err := s.db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&mode); err != nil || mode != "wal" {
 		t.Fatalf("WAL not enabled: %s %v", mode, err)
 	}
+	var timeout int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&timeout); err != nil || timeout != 5000 {
+		t.Fatalf("busy timeout not restored: %d %v", timeout, err)
+	}
 }
 
 func TestConcurrentOpen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "maestro.db")
+	start := make(chan struct{})
 	var wg sync.WaitGroup
-	for range 4 {
+	for range 8 {
 		wg.Go(func() {
+			<-start
 			s, err := Open(context.Background(), path)
 			if err != nil {
 				t.Error(err)
 				return
+			}
+			var version int
+			if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+				t.Error(err)
+			}
+			files, err := migrations.ReadDir("migrations")
+			if err != nil {
+				t.Error(err)
+			} else if version != len(files) {
+				t.Errorf("incomplete migration: version %d, want %d", version, len(files))
 			}
 			if err := s.Close(); err != nil {
 				t.Error(err)
 			}
 		})
 	}
+	close(start)
 	wg.Wait()
+}
+
+func TestOpenWALContention(t *testing.T) {
+	for _, cancelOpen := range []bool{false, true} {
+		name := "released"
+		if cancelOpen {
+			name = "cancelled"
+		}
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "maestro.db")
+			// A reader in rollback-journal mode prevents the switch to WAL.
+			db, err := sql.Open("sqlite", filepath.ToSlash(path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			conn, err := db.Conn(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			if _, err = conn.ExecContext(context.Background(), "CREATE TABLE existing (id INTEGER); BEGIN; SELECT * FROM existing"); err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _, _ = conn.ExecContext(context.Background(), "ROLLBACK") }()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			result := make(chan error, 1)
+			go func() {
+				s, err := Open(ctx, path)
+				if err == nil {
+					err = s.Close()
+				}
+				result <- err
+			}()
+			select {
+			case err := <-result:
+				t.Fatalf("Open returned while WAL setup was blocked: %v", err)
+			case <-time.After(50 * time.Millisecond):
+			}
+			if cancelOpen {
+				cancel()
+			} else if _, err = conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-result:
+				if cancelOpen && !errors.Is(err, context.Canceled) {
+					t.Fatalf("expected cancellation, got %v", err)
+				}
+				if !cancelOpen && err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("Open did not finish after releasing the lock or cancelling")
+			}
+		})
+	}
 }

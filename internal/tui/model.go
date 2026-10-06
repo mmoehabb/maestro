@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -55,6 +57,7 @@ type (
 		id  int64
 		err error
 	}
+	shellMsg struct{ err error }
 )
 
 type Model struct {
@@ -213,6 +216,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.tabs[i].pending = false
 			}
 		}
+	case shellMsg:
+		if msg.err != nil {
+			m.notify("Shell: " + msg.err.Error())
+		}
 	case core.Event:
 		if msg.Err != nil {
 			m.notify(msg.Err.Error())
@@ -339,6 +346,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.tabs) > 0 {
 					return m, m.launch(m.active, key == "R")
 				}
+			case "t":
+				if len(m.tabs) > 0 {
+					shell := os.Getenv("SHELL")
+					if shell == "" {
+						shell = os.Getenv("COMSPEC")
+					}
+					if shell == "" {
+						shell = "sh"
+					}
+					cmd := exec.Command(shell)
+					cmd.Dir = m.tabs[m.active].task.Worktree
+					return m, tea.ExecProcess(cmd, func(err error) tea.Msg { return shellMsg{err} })
+				}
+			case "z":
+				return m, tea.Suspend
 			case "d":
 				if len(m.tabs) > 0 && !m.tabs[m.active].pending {
 					t := &m.tabs[m.active]
@@ -551,7 +573,7 @@ func (m *Model) View() tea.View {
 		}
 	}
 	if m.help {
-		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  archive tab (stop agent, preserve worktree)\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
+		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  archive tab (stop agent, preserve worktree)\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " t  open shell in task directory\n" + m.prefix + " z  suspend maestro\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
 		cursor = nil
 	}
 	if m.dialog != nil {
@@ -578,7 +600,7 @@ func (m *Model) View() tea.View {
 	}
 	footer := m.prefix + " ? help · " + m.prefix + " c new · " + m.prefix + " q quit"
 	if m.prefixed {
-		footer = "Prefix: a agent · h history · c new · x stop · r resume · R fresh · [ scroll · q quit"
+		footer = "Prefix: a agent · h history · c new · x stop · r resume · R fresh · t shell · z suspend · [ scroll · q quit"
 	}
 	if time.Now().Before(m.toastUntil) {
 		footer = m.toast

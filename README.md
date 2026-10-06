@@ -60,6 +60,8 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix d` | Archive the current tab and stop its agent |
 | `prefix x`, `prefix r` | Stop, restart/resume the agent |
 | `prefix R` | Explicitly start a fresh session |
+| `prefix t` | Open shell in task worktree |
+| `prefix z` | Suspend the maestro app |
 | `prefix [` | Scroll history with j/k, arrows and page keys; y copies history |
 | `prefix prefix` | Send the prefix itself to the agent |
 | `prefix q` | Stop agents, save and quit |

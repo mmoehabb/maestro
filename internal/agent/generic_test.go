@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -100,5 +101,38 @@ func TestAdditionalAgentCommands(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPromptDeliveryUsesSelectedRenderedTemplate(t *testing.T) {
+	for _, fresh := range []bool{true, false} {
+		for _, tc := range []struct {
+			name, arg string
+			wantError bool
+		}{
+			{"missing", "--interactive", true},
+			{"inactive conditional", "{{if not .Prompt}}{{.Prompt}}{{end}}", true},
+			{"truncated", "{{printf \"%.4s\" .Prompt}}", true},
+			{"direct", "{{.Prompt}}", false},
+			{"flag", "--prompt={{.Prompt}}", false},
+		} {
+			t.Run(fmt.Sprintf("new=%t/%s", fresh, tc.name), func(t *testing.T) {
+				cfg := config.Agent{Cmd: "fake", New: []string{"{{.Prompt}}"}, Resume: []string{"{{.Prompt}}"}}
+				if fresh {
+					cfg.New = []string{tc.arg}
+				} else {
+					cfg.Resume = []string{tc.arg}
+				}
+				_, err := (Generic{Name: "custom", Config: cfg}).Command(context.Background(), LaunchSpec{NewSession: fresh, SessionID: "saved", Prompt: "Read .maestro/handoff.md first."})
+				if (err != nil) != tc.wantError {
+					t.Fatalf("unexpected delivery result: %v", err)
+				}
+			})
+		}
+	}
+	// Ordinary resume without a new prompt remains valid.
+	_, err := (Generic{Name: "custom", Config: config.Agent{Cmd: "fake", Resume: []string{"--resume", "{{.SessionID}}"}}}).Command(context.Background(), LaunchSpec{SessionID: "saved"})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

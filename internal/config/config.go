@@ -47,6 +47,9 @@ type Config struct {
 		MergeMethod string `toml:"merge_method"`
 		Cleanup     string `toml:"cleanup"`
 	} `toml:"git"`
+	Handoff struct {
+		TokenBudget int `toml:"token_budget"`
+	} `toml:"handoff"`
 	Agents map[string]Agent `toml:"agents"`
 }
 
@@ -111,6 +114,9 @@ func merge(dst, src map[string]any) {
 }
 
 func (c Config) Validate() error {
+	if c.Handoff.TokenBudget <= 0 {
+		return fmt.Errorf("handoff.token_budget must be positive")
+	}
 	if _, ok := c.Agents[c.DefaultAgent]; !ok {
 		return fmt.Errorf("default_agent %q is not configured", c.DefaultAgent)
 	}

@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
-	_ "embed"
+	"embed"
 	"fmt"
 	"net/url"
 	"os"
@@ -14,8 +14,8 @@ import (
 	_ "modernc.org/sqlite" // Register the pure-Go SQLite driver.
 )
 
-//go:embed migrations/0001_init.sql
-var initialSchema string
+//go:embed migrations/*.sql
+var migrations embed.FS
 
 type Store struct{ db *sql.DB }
 
@@ -64,22 +64,40 @@ func (s *Store) migrate(ctx context.Context) error {
 		return err
 	}
 	defer conn.Close()
-	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
-		return err
+	var beginErr error
+	for i := 0; i < 100; i++ {
+		if _, beginErr = conn.ExecContext(ctx, "BEGIN IMMEDIATE"); beginErr == nil {
+			break
+		}
+		if !strings.Contains(beginErr.Error(), "SQLITE_BUSY") {
+			return beginErr
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if beginErr != nil {
+		return beginErr
 	}
 	defer func() { _, _ = conn.ExecContext(context.Background(), "ROLLBACK") }()
 	var version int
 	if err := conn.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 1 {
-		return fmt.Errorf("database version %d is newer than supported version 1", version)
+	files, err := migrations.ReadDir("migrations")
+	if err != nil {
+		return err
 	}
-	if version == 0 {
-		if _, err := conn.ExecContext(ctx, initialSchema); err != nil {
+	if version > len(files) {
+		return fmt.Errorf("database version %d is newer than supported version %d", version, len(files))
+	}
+	for i := version; i < len(files); i++ {
+		script, err := migrations.ReadFile("migrations/" + files[i].Name())
+		if err != nil {
 			return err
 		}
-		if _, err := conn.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
+		if _, err := conn.ExecContext(ctx, string(script)); err != nil {
+			return err
+		}
+		if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", i+1)); err != nil {
 			return err
 		}
 	}

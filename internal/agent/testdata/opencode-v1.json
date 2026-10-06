@@ -1,0 +1,5 @@
+{"info":{"id":"opencode-one"},"messages":[
+{"info":{"id":"m1","role":"user","time":{"created":1791201600000}},"parts":[{"id":"p1","type":"text","text":"Check the login fix."}]},
+{"info":{"id":"m2","role":"assistant","finish":"tool-calls","time":{"created":1791201601000,"completed":1791201602000}},"parts":[{"id":"p2","type":"tool","tool":"bash","callID":"call-one","state":{"status":"completed","input":{"command":"go test ./..."},"output":"PASS"}}]},
+{"info":{"id":"m3","role":"assistant","finish":"stop","time":{"created":1791201603000,"completed":1791201604000}},"parts":[{"id":"p3","type":"text","text":"The fix passes."},{"id":"p4","type":"reasoning","text":"Do not import me"}]}
+]}

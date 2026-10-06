@@ -57,3 +57,6 @@ cmd = "cursor-agent"
 session_create = ["create-chat"]
 new = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
 resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+
+[handoff]
+token_budget = 6000

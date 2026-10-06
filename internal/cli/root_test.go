@@ -2,14 +2,19 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/adrg/xdg"
 
+	"github.com/mmoehabb/maestro/internal/app"
+	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/store"
 	"github.com/mmoehabb/maestro/internal/testutil"
 )
@@ -49,7 +54,6 @@ func TestHelpListsPlannedCommands(t *testing.T) {
 
 func TestStubsReturnNotImplemented(t *testing.T) {
 	cases := map[string][]string{
-		"P2": {"switch", "x"},
 		"P3": {"merge", "x"},
 	}
 	for phase, args := range cases {
@@ -107,5 +111,57 @@ func TestNewAndList(t *testing.T) {
 	out, err = run(t, "config", "path")
 	if err != nil || strings.TrimSpace(out) != filepath.Join(xdg.ConfigHome, "maestro", "config.toml") {
 		t.Fatalf("config path: %q %v", out, err)
+	}
+}
+
+func TestHistoryJSONWhileLockedAndAfterWorktreeDeletion(t *testing.T) {
+	dir := testutil.Repo(t)
+	t.Chdir(dir)
+	oldConfig, oldData := xdg.ConfigHome, xdg.DataHome
+	xdg.ConfigHome, xdg.DataHome = t.TempDir(), t.TempDir()
+	t.Cleanup(func() { xdg.ConfigHome, xdg.DataHome = oldConfig, oldData })
+	if _, err := run(t, "new", "History task"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := app.Open(context.Background(), dir, config.DefaultPaths())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Store.Close()
+	task, err := s.Find(context.Background(), "history-task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := s.Store.StartSession(context.Background(), task, "native", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.SaveScrollback(context.Background(), session.ID, "persistent context"); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := s.OpenRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	if err = os.RemoveAll(task.Worktree); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, "history", "history-task", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var h store.History
+	if err = json.Unmarshal([]byte(out), &h); err != nil {
+		t.Fatal(err)
+	}
+	if h.Task.ID != task.ID || len(h.Turns) != 1 || h.Turns[0].Content != "persistent context" || h.Events == nil || h.Handoffs == nil {
+		t.Fatal(out)
+	}
+	if _, err = run(t, "history", "missing"); err == nil {
+		t.Fatal("missing task accepted")
+	}
+	if _, err = run(t, "switch", "history-task"); err == nil || !strings.Contains(err.Error(), "agent") {
+		t.Fatal("missing agent accepted", err)
 	}
 }

@@ -184,3 +184,10 @@ func (p *Pane) Stop() {
 		<-p.done
 	})
 }
+
+func (p *Pane) NativeEvent(kind string) {
+	p.mu.Lock()
+	p.activity.NativeEvent(kind)
+	p.mu.Unlock()
+	p.invalidate()
+}

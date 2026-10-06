@@ -8,9 +8,14 @@ import (
 )
 
 type Session struct {
-	ID        int64
-	NativeID  string
-	StartedAt time.Time
+	ID             int64      `json:"id"`
+	Agent          string     `json:"agent"`
+	NativeID       string     `json:"native_id"`
+	StartedAt      time.Time  `json:"started_at"`
+	EndedAt        *time.Time `json:"ended_at"`
+	ExitCode       *int       `json:"exit_code"`
+	HandoffFrom    int64      `json:"handoff_from,omitempty"`
+	NativeComplete bool       `json:"native_complete"`
 }
 
 func (s *Store) LatestSession(ctx context.Context, taskID int64) (Session, error) {
@@ -25,7 +30,7 @@ func (s *Store) LatestSession(ctx context.Context, taskID int64) (Session, error
 }
 
 func (s *Store) StartSession(ctx context.Context, task Task, nativeID string, started time.Time) (Session, error) {
-	session := Session{NativeID: nativeID, StartedAt: started}
+	session := Session{NativeID: nativeID, StartedAt: started, Agent: task.Agent}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return session, err
@@ -44,12 +49,49 @@ func (s *Store) StartSession(ctx context.Context, task Task, nativeID string, st
 	if _, err := tx.ExecContext(ctx, "INSERT INTO events(task_id, ts, kind, payload) VALUES(?,?,'agent_started','{}')", task.ID, session.StartedAt.UnixMilli()); err != nil {
 		return session, err
 	}
+	if nativeID != "" {
+		if err := bindIdentity(ctx, tx, session.ID, nativeID); err != nil {
+			return session, err
+		}
+	}
+	var handoffID int64
+	err = tx.QueryRowContext(ctx, `SELECT id,COALESCE(from_session,0) FROM handoffs WHERE task_id=? AND agent=? AND delivered_at IS NULL`, task.ID, task.Agent).Scan(&handoffID, &session.HandoffFrom)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return session, err
+	}
+	if handoffID != 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE agent_sessions SET handoff_from=NULLIF(?,0) WHERE id=?`, session.HandoffFrom, session.ID); err != nil {
+			return session, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE handoffs SET to_session=?,delivered_at=? WHERE id=?`, session.ID, started.UnixMilli(), handoffID); err != nil {
+			return session, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO events(task_id,ts,kind,payload) VALUES(?,?,'switched',json_object('session_id',?,'handoff_id',?,'agent',?))`, task.ID, started.UnixMilli(), session.ID, handoffID, task.Agent); err != nil {
+			return session, err
+		}
+	}
 	return session, tx.Commit()
 }
 
-func (s *Store) SetNativeID(ctx context.Context, id int64, nativeID string) error {
-	_, err := s.db.ExecContext(ctx, "UPDATE agent_sessions SET native_id=? WHERE id=?", nativeID, id)
+func bindIdentity(ctx context.Context, tx *sql.Tx, id int64, nativeID string) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO native_conversations(task_id,agent,native_id) SELECT task_id,agent,? FROM agent_sessions WHERE id=? ON CONFLICT DO NOTHING`, nativeID, id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE agent_sessions SET native_id=?,conversation_id=(SELECT n.id FROM native_conversations n WHERE n.task_id=agent_sessions.task_id AND n.agent=agent_sessions.agent AND n.native_id=?) WHERE id=?`, nativeID, nativeID, id)
 	return err
+}
+
+func (s *Store) SetNativeID(ctx context.Context, id int64, nativeID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	if err = bindIdentity(ctx, tx, id, nativeID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) EndSession(ctx context.Context, id int64, code int) error {
@@ -61,5 +103,12 @@ func (s *Store) EndSession(ctx context.Context, id int64, code int) error {
 func (s *Store) SaveScrollback(ctx context.Context, id int64, text string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO turns(session_id, seq, role, content, ts) VALUES(?,0,'terminal',?,?)
 		ON CONFLICT(session_id,seq) DO UPDATE SET content=excluded.content, ts=excluded.ts`, id, text, time.Now().UnixMilli())
+	return err
+}
+
+// SetNativeComplete records whether the latest native snapshot was fully imported.
+// Unknown and failed imports retain terminal fallback in handoffs.
+func (s *Store) SetNativeComplete(ctx context.Context, sessionID int64, complete bool) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE agent_sessions SET native_complete=? WHERE id=?", complete, sessionID)
 	return err
 }

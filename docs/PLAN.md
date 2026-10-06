@@ -265,7 +265,7 @@ type Turn struct{ Role, Content string; TS time.Time }
 Session discovery works because **each task has a unique worktree path**. Matching on cwd/workspace stays reliable even when several tabs run the same agent. Transcripts are re-imported (incrementally, by `seq`) after every "Done" turn, when the agent exits, and when you switch agents.
 
 > [!NOTE]
-> These session-file formats still need to be checked against real files during P2: codex isn't logged in on the dev machine, and opencode isn't installed.
+> P2 parsers have fixture coverage and read-only checks against locally available native transcripts/exports. Authenticated live cross-agent conversations remain a manual acceptance check.
 
 ---
 
@@ -435,7 +435,7 @@ maestro completion <shell>
 
 ### Implementation status
 
-P0 and P1 are implemented. P1 includes:
+P0, P1 and the P2 implementation are delivered. Authenticated live P2 acceptance remains a manual check. P1 includes:
 
 - Layered TOML defaults/global/repo configuration, validation, and per-task CLI overrides.
 - SQLite migration with WAL and foreign keys; project/task/session persistence, atomic creation/start events, exit status and terminal fallback history.
@@ -452,6 +452,17 @@ Implementation adjustments: minimal native session **identity** discovery was br
 The dependency versions already selected in `go.mod` require Go 1.26, superseding the original Go 1.24 stack entry above.
 
 Verification includes race-enabled tests, vet, lint with golangci-lint v2.9.0, module tidiness and Linux/Windows/macOS builds. A Linux terminal smoke test exercised three tabs, Working → Done, NeedsInput, creating a fourth task through the dialog, listing while locked, quitting and reopening with the same native IDs, fallback prefix, and simulated enhanced-keyboard replies. Native Windows/macOS execution and authenticated real-agent conversations remain manual verification items. CI now pins a Go 1.26-compatible linter.
+
+P2 implementation includes:
+
+- A configured-agent registry with versioned Codex, agy and OpenCode transcript parsers; filesystem watching and periodic export reconciliation, malformed-format fallback, and synthetic fixtures. OpenCode additionally supports its observed SQLite schema in strictly read-only mode when the CLI produces no usable JSON.
+- SQLite migration v2 separating native conversation identity from process launches, source-key transcript upserts, consistent history snapshots, persisted handoffs and agent-specific resume lookup. Existing P1 terminal history is retained.
+- Native turn activity precedence, per-task operation serialization, stale-pane event filtering, final history flush on stop, and pending-handoff recovery after launch/write failure.
+- Deterministic budgeted handoffs including goal, notes, recent conversation, explicit TODO mentions and Git state. `[handoff] token_budget` defaults to 6000; the conservative estimator counts one UTF-8 byte per token. Smart summarization is deferred.
+- `prefix a` switch/confirmation dialog, `prefix h` expandable history, `prefix H` manual-prompt handoff copy, `maestro history [--json]`, and `maestro switch <task> -a <agent>` opening the focused TUI under the existing project lock.
+- Fixture/parser tests; P1 migration and transcript ownership tests; handoff budget/symlink tests; a fake-agent Codex → agy → Codex integration test; failure recovery and concurrent lifecycle tests; history retention after deleting the worktree/source logs and reopening the database; CLI history while locked; and switch/history snapshots at both viewport sizes.
+
+P2 verification separates automated fixture/PTY tests and read-only local parser compatibility checks from authenticated live conversations. The latter, along with native Windows/macOS terminal execution, remain manual checks. Archive/reopen and handoff-file archival remain P3; SQLite already retains the handoff contents.
 
 ```mermaid
 flowchart LR

@@ -1,0 +1,24 @@
+ ♪ maestro /repo
+ ⠋ fix-auth · codex  ✓ add-tui · codex  ⚑ refactor · codex 
+History · Fix authentication
+Tab session · Enter expand · t tools · j/k scroll · r refresh · Esc return
+
+Oct 05 12:00:00  created
+Oct 05 12:01:00  switched
+
+› − codex · session 1 · Oct 05 12:00
+
+[user]
+Fix the login cookie.
+  [tool_result hidden; t to expand]
+
+[assistant]
+Cookie validation fixed.
+
+  + agy · session 2 · Oct 05 12:01
+
+
+
+
+ codex · maestro/fix-auth · +0 −0 · 0 files · ↑0 ↓0 · active
+ctrl+b ? help · ctrl+b c new · ctrl+b q quit

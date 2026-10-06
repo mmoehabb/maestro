@@ -139,3 +139,38 @@ func TestGenericSessionFile(t *testing.T) {
 		t.Fatal("invalid session ID accepted")
 	}
 }
+
+func TestAgyDiscoveryWithMalformedConversation(t *testing.T) {
+	home, dir := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	root := filepath.Join(home, ".gemini", "antigravity-cli")
+	logs := filepath.Join(root, "brain", "saved-id", ".system_generated", "logs")
+	for _, p := range []string{logs, filepath.Join(root, "cache")} {
+		if err := os.MkdirAll(p, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cache, err := json.Marshal(map[string]string{dir: "saved-id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(root, "cache", "last_conversations.json"), cache, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	transcript := fmt.Sprintf("{\"type\":\"USER_INPUT\",\"created_at\":%q,\"content\":\"hello\"}\nmalformed\n", now.Format(time.RFC3339Nano))
+	if err = os.WriteFile(filepath.Join(logs, "transcript.jsonl"), []byte(transcript), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := Generic{Name: "agy"}
+	if id, err := a.DiscoverSession(context.Background(), dir, now); err != nil || id != "saved-id" {
+		t.Fatal(id, err)
+	}
+	if id, err := a.DiscoverSession(context.Background(), dir, now.Add(time.Hour)); err != nil || id != "" {
+		t.Fatal("accepted stale identity", id, err)
+	}
+	if id, err := a.DiscoverSession(context.Background(), t.TempDir(), now); err != nil || id != "" {
+		t.Fatal("accepted other workspace", id, err)
+	}
+}

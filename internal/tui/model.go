@@ -30,9 +30,10 @@ type tab struct {
 	state   term.State
 }
 type (
-	tickMsg          time.Time
-	prefixTimeoutMsg struct{}
-	loadedMsg        struct {
+	tickMsg           time.Time
+	prefixTimeoutMsg  struct{}
+	editorFinishedMsg struct{ err error }
+	loadedMsg         struct {
 		tasks []store.Task
 		err   error
 	}
@@ -134,6 +135,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notify("Keyboard disambiguation unavailable; prefix is " + m.prefix + ". Enter goes to the agent.")
 		}
 		m.prefixSettled = true
+	case editorFinishedMsg:
+		if msg.err != nil {
+			m.notify("Editor exited with error: " + msg.err.Error())
+		}
+		return m, nil
 	case loadedMsg:
 		m.loaded = true
 		if msg.err != nil {
@@ -375,6 +381,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					id := t.task.ID
 					return m, func() tea.Msg { m.runtime.Stop(id); return stoppedMsg{id} }
 				}
+			case "e":
+				if len(m.tabs) > 0 {
+					return m, m.openEditor(m.tabs[m.active].task.Worktree)
+				}
 			default:
 				m.notify("Unknown shortcut; " + m.prefix + " ? for help")
 			}
@@ -573,7 +583,7 @@ func (m *Model) View() tea.View {
 		}
 	}
 	if m.help {
-		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  archive tab (stop agent, preserve worktree)\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " t  open shell in task directory\n" + m.prefix + " z  suspend maestro\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
+		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " e  open default editor\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  archive tab (stop agent, preserve worktree)\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " t  open shell in task directory\n" + m.prefix + " z  suspend maestro\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
 		cursor = nil
 	}
 	if m.dialog != nil {
@@ -600,7 +610,7 @@ func (m *Model) View() tea.View {
 	}
 	footer := m.prefix + " ? help · " + m.prefix + " c new · " + m.prefix + " q quit"
 	if m.prefixed {
-		footer = "Prefix: a agent · h history · c new · x stop · r resume · R fresh · t shell · z suspend · [ scroll · q quit"
+		footer = "Prefix: a agent · h history · e editor · c new · x stop · r resume · R fresh · t shell · z suspend · [ scroll · q quit"
 	}
 	if time.Now().Before(m.toastUntil) {
 		footer = m.toast
@@ -616,4 +626,24 @@ func (m *Model) View() tea.View {
 	v.KeyboardEnhancements.ReportEventTypes = true
 	v.KeyboardEnhancements.ReportAlternateKeys = true
 	return v
+}
+
+func (m *Model) openEditor(worktree string) tea.Cmd {
+	editor := strings.TrimSpace(m.cfg.Editor)
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		editor = os.Getenv("EDITOR")
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+	parts := strings.Fields(editor)
+	parts = append(parts, ".")
+	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Dir = worktree
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return editorFinishedMsg{err}
+	})
 }

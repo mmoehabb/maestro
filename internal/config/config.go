@@ -33,6 +33,7 @@ type Config struct {
 	Icons          string `toml:"icons"`
 	Theme          string `toml:"theme"`
 	DefaultAgent   string `toml:"default_agent"`
+	Editor         string `toml:"editor"`
 	Activity       struct {
 		IdleAfter string   `toml:"idle_after"`
 		NotifyOn  []string `toml:"notify_on"`

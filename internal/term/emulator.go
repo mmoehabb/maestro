@@ -31,12 +31,34 @@ type virtualTerminal struct {
 	visible bool
 	flags   int
 	stack   []int
+	lastAlt string
 }
 
 func NewEmulator(cols, rows int, complete func()) Emulator {
 	e := &virtualTerminal{vt: vt.NewEmulator(cols, rows), visible: true}
 	e.vt.SetScrollbackSize(10000)
 	e.vt.SetCallbacks(vt.Callbacks{Title: func(s string) { e.title = s }, CursorVisibility: func(v bool) { e.visible = v }, Bell: complete})
+	// Observe destructive operations before vt's default handlers switch or
+	// clear the screen. Returning false preserves normal terminal semantics,
+	// including sequences split across PTY reads and combined mode parameters.
+	e.vt.RegisterCsiHandler(ansi.Command('?', 0, 'l'), func(p ansi.Params) bool {
+		for i := range p {
+			mode, _, _ := p.Param(i, 0)
+			if mode == 1047 || mode == 1049 {
+				e.preserveAltScreen()
+				break
+			}
+		}
+		return false
+	})
+	e.vt.RegisterCsiHandler(ansi.Command(0, 0, 'J'), func(p ansi.Params) bool {
+		mode, _, _ := p.Param(0, 0)
+		if mode == 2 || mode == 3 {
+			e.preserveAltScreen()
+		}
+		return false
+	})
+	e.vt.RegisterEscHandler(ansi.Command(0, 0, 'c'), func() bool { e.preserveAltScreen(); return false })
 	for _, osc := range []int{9, 777} {
 		e.vt.RegisterOscHandler(osc, func([]byte) bool { complete(); return true })
 	}
@@ -90,14 +112,35 @@ func (e *virtualTerminal) Cursor() (int, int, bool) {
 	return p.X, p.Y, e.visible
 }
 func (e *virtualTerminal) Paste(s string) { e.vt.Paste(s) }
+
+func (e *virtualTerminal) preserveAltScreen() {
+	if !e.vt.IsAltScreen() {
+		return
+	}
+	text := strings.TrimSpace(e.vt.String())
+	if text == "" || text == e.lastAlt {
+		return
+	}
+	e.lastAlt = text
+	// The main scrollback remains bounded by SetScrollbackSize. Preserve cells,
+	// not ANSI rendering, so history and copy mode stay plain text.
+	for y := 0; y < e.vt.Height(); y++ {
+		line := make(uv.Line, e.vt.Width())
+		for x := range line {
+			if cell := e.vt.CellAt(x, y); cell != nil {
+				line[x] = *cell
+			}
+		}
+		e.vt.Scrollback().Push(line)
+	}
+}
+
 func (e *virtualTerminal) Scrollback() []string {
 	lines := make([]string, e.vt.ScrollbackLen())
 	for y := range lines {
 		var b strings.Builder
-		for x := 0; x < e.vt.Width(); x++ {
-			if c := e.vt.ScrollbackCellAt(x, y); c != nil {
-				b.WriteString(c.Content)
-			}
+		for _, cell := range e.vt.Scrollback().Line(y) {
+			b.WriteString(cell.Content)
 		}
 		lines[y] = strings.TrimRight(b.String(), " ")
 	}

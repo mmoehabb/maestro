@@ -65,6 +65,7 @@ type Model struct {
 	initialAgent, manualInstruction                           string
 	switcher                                                  *switchDialog
 	history                                                   *historyView
+	notes                                                     *notesDialog
 	service                                                   *core.TaskService
 	runtime                                                   *core.Runtime
 	cfg                                                       config.Config
@@ -116,8 +117,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg := msg.(type) {
+	case notesSavedMsg:
+		m.notesSaved(msg)
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.notes != nil {
+			m.notes.input.SetWidth(max(1, m.width-2))
+			m.notes.input.SetHeight(max(1, m.height-9))
+		}
 		cols, rows := m.size()
 		for i := range m.tabs {
 			if m.tabs[i].pane != nil {
@@ -289,6 +296,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.swallowed = make(map[rune]bool)
 		}
 		m.swallowed[msg.Code] = true
+		if m.notes != nil {
+			return m, m.notesKey(msg)
+		}
 		if m.switcher != nil {
 			return m, m.switchKey(msg)
 		}
@@ -340,6 +350,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.openSwitch()
 			case "h":
 				return m, m.openHistory()
+			case "n":
+				return m, m.openNotes()
 			case "H":
 				if m.manualInstruction != "" {
 					return m, tea.SetClipboard(m.manualInstruction)
@@ -415,10 +427,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.swallowed, msg.Code)
 			return m, nil
 		}
-		if !m.prefixed && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+		if !m.prefixed && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Key(uv.Key(msg), true)
 		}
 	case tea.PasteMsg:
+		if m.notes != nil {
+			if m.notes.busy {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.notes.input, cmd = m.notes.input.Update(msg)
+			return m, cmd
+		}
 		if m.switcher != nil || m.history != nil {
 			return m, nil
 		}
@@ -429,7 +449,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabs[m.active].pane.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
-		if m.dialog != nil || m.switcher != nil || m.history != nil || m.help {
+		if m.notes != nil || m.dialog != nil || m.switcher != nil || m.history != nil || m.help {
 			return m, nil
 		}
 		mouse := msg.Mouse()
@@ -457,6 +477,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_, motion := msg.(tea.MouseMotionMsg)
 			m.tabs[m.active].pane.Mouse(uv.Mouse(mouse), release, motion)
 		}
+	}
+	if m.notes != nil && !m.notes.busy {
+		var cmd tea.Cmd
+		m.notes.input, cmd = m.notes.input.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -583,7 +608,7 @@ func (m *Model) View() tea.View {
 		}
 	}
 	if m.help {
-		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " e  open default editor\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  archive tab (stop agent, preserve worktree)\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " t  open shell in task directory\n" + m.prefix + " z  suspend maestro\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
+		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " e  open default editor\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " n  edit task notes\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  archive tab (stop agent, preserve worktree)\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " t  open shell in task directory\n" + m.prefix + " z  suspend maestro\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
 		cursor = nil
 	}
 	if m.dialog != nil {
@@ -598,6 +623,10 @@ func (m *Model) View() tea.View {
 		body = m.history.View(cols, rows)
 		cursor = nil
 	}
+	if m.notes != nil {
+		body = m.notes.View()
+		cursor = nil
+	}
 	lines := strings.Split(body, "\n")
 	for len(lines) < rows {
 		lines = append(lines, "")
@@ -610,7 +639,7 @@ func (m *Model) View() tea.View {
 	}
 	footer := m.prefix + " ? help · " + m.prefix + " c new · " + m.prefix + " q quit"
 	if m.prefixed {
-		footer = "Prefix: a agent · h history · e editor · c new · x stop · r resume · R fresh · t shell · z suspend · [ scroll · q quit"
+		footer = "Prefix: a agent · h history · n notes · e editor · c new · x stop · r resume · R fresh · t shell · z suspend · [ scroll · q quit"
 	}
 	if time.Now().Before(m.toastUntil) {
 		footer = m.toast

@@ -17,19 +17,23 @@ type Snapshot struct {
 	X, Y          int
 	CursorVisible bool
 	ExitCode      int
+	InputError    error
+	HasOutput     bool
 }
 
 type Pane struct {
-	mu       sync.Mutex
-	pty      xpty.Pty
-	emu      Emulator
-	cmd      *exec.Cmd
-	activity Activity
-	done     chan struct{}
-	dirty    chan struct{}
-	exitCode int
-	stop     sync.Once
-	kill     func()
+	mu        sync.Mutex
+	pty       xpty.Pty
+	emu       Emulator
+	cmd       *exec.Cmd
+	activity  Activity
+	done      chan struct{}
+	dirty     chan struct{}
+	exitCode  int
+	stop      sync.Once
+	kill      func()
+	input     *inputQueue
+	hasOutput bool
 }
 
 func Start(cmd *exec.Cmd, cols, rows int, idle time.Duration, hints []string) (*Pane, error) {
@@ -54,16 +58,33 @@ func Start(cmd *exec.Cmd, cols, rows int, idle time.Duration, hints []string) (*
 		return nil, err
 	}
 	closeSlave(pt)
+	transport, err := paneTransport(pt)
+	if err != nil {
+		p.kill()
+		_ = xpty.WaitProcess(context.Background(), cmd)
+		_ = pt.Close()
+		_ = p.emu.Close()
+		return nil, err
+	}
+	p.input = newInputQueue()
 	readDone := make(chan struct{})
 	writeDone := make(chan struct{})
-	go func() { defer close(writeDone); _, _ = io.Copy(pt, p.emu) }()
+	inputDone := make(chan struct{})
+	go func() {
+		defer close(inputDone)
+		_, _ = io.Copy(p.input, p.emu)
+		// Overflow must release synchronous emulator writers as well.
+		_ = p.emu.Close()
+	}()
+	go func() { defer close(writeDone); _, _ = io.Copy(transport, p.input) }()
 	go func() {
 		defer close(readDone)
 		buf := make([]byte, 32768)
 		for {
-			n, err := pt.Read(buf)
+			n, err := transport.Read(buf)
 			if n > 0 {
 				p.mu.Lock()
+				p.hasOutput = true
 				p.activity.Output(buf[:n], time.Now())
 				_, _ = p.emu.Write(buf[:n])
 				p.mu.Unlock()
@@ -83,11 +104,14 @@ func Start(cmd *exec.Cmd, cols, rows int, idle time.Duration, hints []string) (*
 		case <-readDone:
 		case <-time.After(150 * time.Millisecond):
 		}
+		p.input.Close()
+		_ = transport.Close()
 		_ = pt.Close()
 		// Closing the emulator's input pipe releases a writer blocked on replies.
 		_ = p.emu.Close()
 		<-readDone
 		<-writeDone
+		<-inputDone
 		p.mu.Lock()
 		p.exitCode = -1
 		if cmd.ProcessState != nil {
@@ -116,7 +140,7 @@ func (p *Pane) Snapshot(render bool) Snapshot {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.activity.Tick(time.Now())
-	s := Snapshot{State: p.activity.State, Title: p.emu.Title(), ExitCode: p.exitCode}
+	s := Snapshot{State: p.activity.State, Title: p.emu.Title(), ExitCode: p.exitCode, InputError: p.input.Err(), HasOutput: p.hasOutput}
 	if render {
 		s.Screen = p.emu.Render()
 		s.X, s.Y, s.CursorVisible = p.emu.Cursor()
@@ -174,7 +198,7 @@ func (p *Pane) Stop() {
 			return
 		default:
 		}
-		interruptProcess(p.cmd, p.pty)
+		interruptProcess(p.cmd, p.input)
 		select {
 		case <-p.done:
 			return

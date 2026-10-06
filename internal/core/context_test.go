@@ -42,6 +42,12 @@ func TestContextAgentProcess(t *testing.T) {
 		os.Exit(2)
 	}
 	kind, mode, id := args[0], args[1], args[2]
+	if os.Getenv("MAESTRO_FAIL_STARTUP_AGENT") == kind {
+		fmt.Println("startup failed before session initialization")
+		delay, _ := time.ParseDuration(os.Getenv("MAESTRO_FAIL_STARTUP_DELAY"))
+		time.Sleep(delay)
+		os.Exit(7)
+	}
 	dir, _ := os.Getwd()
 	var path string
 	if kind == "codex" {
@@ -316,7 +322,13 @@ func TestSwitchPreflightAndPendingRecovery(t *testing.T) {
 	if !strings.Contains(strings.Join(p.Scrollback(), "\n"), strings.Split(handoff.Instruction, ".")[0]) {
 		t.Fatal("retry lost handoff prompt")
 	}
+	sendLine(p, "work") // Native targets acknowledge delivery with a new turn.
 	pending, err = s.Store.PendingHandoff(ctx, task.ID)
+	deadline := time.Now().Add(4 * time.Second)
+	for err == nil && pending.ID != 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		pending, err = s.Store.PendingHandoff(ctx, task.ID)
+	}
 	if err != nil || pending.ID != 0 {
 		t.Fatal(pending, err)
 	}
@@ -563,4 +575,144 @@ func TestSwitchRejectsUndeliverableHandoff(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStartupCrashRetainsHandoffAcrossRestart(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	ctx := context.Background()
+	p, err := r.Start(task, 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready codex new")
+	t.Setenv("MAESTRO_FAIL_STARTUP_AGENT", "agy")
+	t.Setenv("MAESTRO_FAIL_STARTUP_DELAY", "2500ms") // Outlast the generic startup fallback.
+	p, err = r.Switch(ctx, task, "agy", 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Crashed, "startup failed")
+	r.Stop(task.ID) // Join final persistence, not only the process.
+	pending, err := s.Store.PendingHandoff(ctx, task.ID)
+	if err != nil || pending.ID == 0 {
+		t.Fatal("startup crash consumed handoff", pending, err)
+	}
+	if err = r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s.Store, err = store.Open(ctx, filepath.Join(filepath.Dir(s.Config.Worktree.Root), "maestro.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := s.Store.PendingHandoff(ctx, task.ID)
+	if err != nil || saved.ID != pending.ID || saved.Content != pending.Content {
+		t.Fatal("restart lost pending context", saved, err)
+	}
+	t.Setenv("MAESTRO_FAIL_STARTUP_AGENT", "")
+	r, err = s.OpenRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	// Recovery explicitly starts fresh because the failed target never created
+	// the generated native ID. Even this path must retain the original handoff.
+	p, err = r.Start(task, 80, 24, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready agy new")
+	if !strings.Contains(strings.Join(p.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
+		t.Fatal("recovery lost handoff instruction")
+	}
+	sendLine(p, "work")
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		saved, err = s.Store.PendingHandoff(ctx, task.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if saved.ID == 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("initialized agent never acknowledged handoff")
+}
+
+func TestNotesPersistAndReachNextAgent(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	ctx := context.Background()
+	notes := "Keep API compatibility.\nTODO: cover session expiry."
+	if err := s.SetNotes(ctx, task.Slug, "outside writer"); err == nil {
+		t.Fatal("CLI notes bypassed runtime lock")
+	}
+	if err := r.SetNotes(ctx, task, notes); err != nil {
+		t.Fatal(err)
+	}
+	task, err := s.Find(ctx, task.Slug)
+	if err != nil || task.Notes != notes {
+		t.Fatal(task, err)
+	}
+	p, err := r.Switch(ctx, task, "agy", 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready agy new")
+	content, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
+	if err != nil || !strings.Contains(string(content), notes) {
+		t.Fatal("notes missing from handoff", string(content), err)
+	}
+	if err = r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SetNotes(ctx, task.Slug, ""); err != nil {
+		t.Fatal(err)
+	}
+	h, err := s.History(ctx, task.Slug)
+	if err != nil || h.Task.Notes != "" {
+		t.Fatal(h.Task, err)
+	}
+	count := 0
+	for _, e := range h.Events {
+		if e.Kind == "notes_updated" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatal("missing notes timeline events", count)
+	}
+}
+
+func TestGenericHandoffAcknowledgesLiveStartup(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	t.Setenv("MAESTRO_TEST_HELPER", "1")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Config.Agents["fake"] = config.Agent{Cmd: exe, GenerateSessionID: true, New: []string{"-test.run=^TestAgentProcess$", "--", "new", "{{.SessionID}}", "{{.Prompt}}"}, Resume: []string{"-test.run=^TestAgentProcess$", "--", "resume", "{{.SessionID}}", "{{.Prompt}}"}}
+	p, err := r.Switch(context.Background(), task, "fake", 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready new")
+	pending, err := s.Store.PendingHandoff(context.Background(), task.ID)
+	if err != nil || pending.ID == 0 {
+		t.Fatal("generic handoff consumed before startup window", pending, err)
+	}
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		pending, err = s.Store.PendingHandoff(context.Background(), task.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pending.ID == 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("generic handoff not acknowledged after live startup")
 }

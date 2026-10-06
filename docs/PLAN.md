@@ -425,6 +425,7 @@ maestro switch <task> -a agy
 maestro push|pr|merge <task>
 maestro archive|reopen|rm <task>
 maestro history <task> [--json] timeline + transcript
+maestro notes <task> [--set TEXT | --file PATH|-]
 maestro doctor                  agents and versions, git, GitHub auth, keyboard enhancements (active prefix), Nerd Font
 maestro config [edit|path]
 maestro completion <shell>
@@ -459,11 +460,20 @@ P2 implementation includes:
 - A configured-agent registry with versioned Codex, agy and OpenCode transcript parsers; filesystem watching and periodic export reconciliation, malformed-format fallback, and synthetic fixtures. OpenCode additionally supports its observed SQLite schema in strictly read-only mode when the CLI produces no usable JSON.
 - SQLite migration v2 separating native conversation identity from process launches, source-key transcript upserts, consistent history snapshots, persisted handoffs and agent-specific resume lookup. Existing P1 terminal history is retained.
 - Native turn activity precedence, per-task operation serialization, stale-pane event filtering, final history flush on stop, and pending-handoff recovery after launch/write failure.
+- Pending handoffs also survive early startup crashes; delivery is acknowledged by a new native turn, clean exit, or an active pane surviving a two-second startup window for generic agents without native turn adapters.
+- Multiline task notes through `prefix n` (Ctrl+S save, Esc cancel) and `maestro notes` (`--set` / `--file`, including stdin), with locked writes, timeline events, and inclusion in subsequent handoffs.
 - Deterministic budgeted handoffs including goal, notes, recent conversation, explicit TODO mentions and Git state. `[handoff] token_budget` defaults to 6000; the conservative estimator counts one UTF-8 byte per token. Smart summarization is deferred.
 - `prefix a` switch/confirmation dialog, `prefix h` expandable history, `prefix H` manual-prompt handoff copy, `maestro history [--json]`, and `maestro switch <task> -a <agent>` opening the focused TUI under the existing project lock.
 - Fixture/parser tests; P1 migration and transcript ownership tests; handoff budget/symlink tests; a fake-agent Codex → agy → Codex integration test; failure recovery and concurrent lifecycle tests; history retention after deleting the worktree/source logs and reopening the database; CLI history while locked; and switch/history snapshots at both viewport sizes.
 
 P2 verification separates automated fixture/PTY tests and read-only local parser compatibility checks from authenticated live conversations. The latter, along with native Windows/macOS terminal execution, remain manual checks. Archive/reopen and handoff-file archival remain P3; SQLite already retains the handoff contents.
+
+P1/P2 regression coverage also includes blocked raw-PTY input and bounded shutdown,
+alternate-screen teardown and resized scrollback capture, startup-crash handoff
+recovery across database reopening, and notes persistence, locking, handoff inclusion,
+and editor snapshots. Pane input is queued separately from PTY writes; a 16 MiB
+pending-input limit reports an error and requires restarting the agent instead of
+blocking the UI or growing memory without a bound.
 
 ```mermaid
 flowchart LR

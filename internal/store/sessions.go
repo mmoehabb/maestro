@@ -63,7 +63,8 @@ func (s *Store) StartSession(ctx context.Context, task Task, nativeID string, st
 		if _, err := tx.ExecContext(ctx, `UPDATE agent_sessions SET handoff_from=NULLIF(?,0) WHERE id=?`, session.HandoffFrom, session.ID); err != nil {
 			return session, err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE handoffs SET to_session=?,delivered_at=? WHERE id=?`, session.ID, started.UnixMilli(), handoffID); err != nil {
+		// Process creation is not delivery: an agent can still fail during startup.
+		if _, err := tx.ExecContext(ctx, `UPDATE handoffs SET to_session=? WHERE id=?`, session.ID, handoffID); err != nil {
 			return session, err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO events(task_id,ts,kind,payload) VALUES(?,?,'switched',json_object('session_id',?,'handoff_id',?,'agent',?))`, task.ID, started.UnixMilli(), session.ID, handoffID, task.Agent); err != nil {
@@ -71,6 +72,13 @@ func (s *Store) StartSession(ctx context.Context, task Task, nativeID string, st
 		}
 	}
 	return session, tx.Commit()
+}
+
+// ConfirmHandoff acknowledges only the launch currently associated with the
+// pending handoff. A stale watcher cannot consume a newer switch's context.
+func (s *Store) ConfirmHandoff(ctx context.Context, sessionID int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE handoffs SET delivered_at=? WHERE to_session=? AND delivered_at IS NULL`, time.Now().UnixMilli(), sessionID)
+	return err
 }
 
 func bindIdentity(ctx context.Context, tx *sql.Tx, id int64, nativeID string) error {

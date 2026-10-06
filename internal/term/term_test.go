@@ -2,6 +2,7 @@ package term
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -251,4 +252,56 @@ func TestDelayedNativeStartPreservesApproval(t *testing.T) {
 	if a.State != Done {
 		t.Fatal("native completion ignored")
 	}
+}
+
+func TestAlternateScreenHistorySurvivesTeardown(t *testing.T) {
+	for _, exit := range []string{"\x1b[?1049l", "\x1b[?25;1049l", "\x1b[2J\x1b[?1049l"} {
+		e := NewEmulator(80, 24, func() {})
+		// Write bytewise to exercise sequences split across PTY reads.
+		for _, b := range []byte("\x1b[?1049himportant conversation" + exit) {
+			_, _ = e.Write([]byte{b})
+		}
+		if !strings.Contains(strings.Join(e.Scrollback(), "\n"), "important conversation") {
+			t.Errorf("conversation lost on %q", exit)
+		}
+		if strings.Contains(e.Render(), "important conversation") {
+			t.Error("alternate screen remains visible after exit")
+		}
+		_ = e.Close()
+	}
+}
+
+func TestScrollbackRetainsOriginalLineWidth(t *testing.T) {
+	e := NewEmulator(80, 2, func() {})
+	defer e.Close()
+	line := strings.Repeat("a", 40) + "IMPORTANT_END"
+	_, _ = io.WriteString(e, line+"\r\nnext\r\nlast\r\n")
+	e.Resize(20, 2)
+	if !strings.Contains(strings.Join(e.Scrollback(), "\n"), line) {
+		t.Fatal("narrow resize truncated history")
+	}
+}
+
+func TestInputQueueOrderingAndOverflow(t *testing.T) {
+	q := newInputQueue()
+	if _, err := q.Write([]byte("first")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.Write([]byte("second")); err != nil {
+		t.Fatal(err)
+	}
+	out := make([]byte, 11)
+	if _, err := io.ReadFull(q, out); err != nil || string(out) != "firstsecond" {
+		t.Fatal(string(out), err)
+	}
+	if _, err := q.Write(make([]byte, maxPendingInput+1)); err == nil {
+		t.Fatal("unbounded pending input")
+	}
+	if q.Err() == nil {
+		t.Fatal("overflow was not reported")
+	}
+	if _, err := q.Read(out); !errors.Is(err, io.EOF) {
+		t.Fatal("overflow reader remains blocked", err)
+	}
+	q.Close()
 }

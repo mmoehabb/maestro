@@ -1,6 +1,7 @@
 package term
 
 import (
+	"io"
 	"os/exec"
 	"sync"
 	"unsafe"
@@ -9,9 +10,23 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func prepareProcess(_ *exec.Cmd)                {}
-func closeSlave(_ xpty.Pty)                     {}
-func interruptProcess(_ *exec.Cmd, pt xpty.Pty) { _, _ = pt.Write([]byte{3}) }
+type conPTYTransport struct{ xpty.Pty }
+
+func paneTransport(pt xpty.Pty) (io.ReadWriteCloser, error) {
+	return conPTYTransport{pt}, nil
+}
+
+func (t conPTYTransport) Close() error {
+	// Cancel pending synchronous pipe I/O before closing the pseudo console.
+	p := t.Pty.(*xpty.ConPty)
+	_ = windows.CancelIoEx(windows.Handle(p.InPipeWriteFd()), nil)
+	_ = windows.CancelIoEx(windows.Handle(p.OutPipeReadFd()), nil)
+	return nil
+}
+
+func prepareProcess(_ *exec.Cmd)                      {}
+func closeSlave(_ xpty.Pty)                           {}
+func interruptProcess(_ *exec.Cmd, input *inputQueue) { _, _ = input.Write([]byte{3}) }
 
 // A kill-on-close job also owns descendants, unlike killing only the ConPTY
 // root process. This works for normal exit, explicit stop and application quit.

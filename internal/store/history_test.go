@@ -163,6 +163,18 @@ func TestPendingHandoffConsumedOnlyByTargetLaunch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if pending, err = s.PendingHandoff(ctx, task.ID); err != nil || pending.ID == 0 {
+		t.Fatal("process creation consumed pending handoff", pending, err)
+	}
+	if err = s.ConfirmHandoff(ctx, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if pending, err = s.PendingHandoff(ctx, task.ID); err != nil || pending.ID == 0 {
+		t.Fatal("wrong session consumed pending handoff", pending, err)
+	}
+	if err = s.ConfirmHandoff(ctx, second.ID); err != nil {
+		t.Fatal(err)
+	}
 	pending, err = s.PendingHandoff(ctx, task.ID)
 	if err != nil || pending.ID != 0 {
 		t.Fatal(pending, err)

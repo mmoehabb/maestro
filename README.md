@@ -56,6 +56,7 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix a` | Switch agents with context handoff |
 | `prefix h` | Task timeline and expandable conversation history |
 | `prefix H` | Copy the handoff instruction for manual-prompt agents |
+| `prefix n` | Edit task notes (Ctrl+S saves, Esc cancels) |
 | `prefix c` | New task: title, base branch, agent and prompt |
 | `prefix d` | Archive the current tab and stop its agent |
 | `prefix x`, `prefix r` | Stop, restart/resume the agent |
@@ -150,6 +151,14 @@ token; actual model token usage is usually lower. Older dialogue and tool output
 are trimmed, with omission markers. Terminal snapshots retain their newest lines
 and remain in the handoff when native history could not be fully imported.
 No model calls are made to summarize history.
+
+Use `prefix n` to edit multiline task notes. Ctrl+S saves them and Escape cancels;
+notes are kept in SQLite and included in subsequent handoffs. Outside the TUI,
+`maestro notes <task>` prints them, `maestro notes <task> --set "text"` replaces
+them, and `--file notes.md` or `--file -` reads replacement notes from a file or
+stdin. `--set ""` clears notes. Notes accept up to 64 KiB of UTF-8 text. Reading
+works while the TUI is open; updates use the project lock.
+
 Switching validates that the selected new/resume template includes the full
 handoff instruction in its rendered arguments before stopping the current agent.
 If an agent cannot accept prompts on launch, configure `manual_prompt = true`.
@@ -158,6 +167,12 @@ instruction, then paste it into their pane.
 
 A pending handoff is stored in SQLite before launch. If writing the file or
 starting the new process fails, retry with `prefix r`; the saved handoff is reused.
+An early startup crash also retains it. Delivery is acknowledged by a new native
+turn signal, a clean process exit, or an active pane surviving a two-second startup
+window (only for generic agents without native turn adapters). Native adapters
+retain pending context until a new turn signal or clean exit. If startup never
+created the recorded native session, use `prefix R` to retry fresh with the saved
+handoff. Merely creating a process no longer consumes pending context.
 If the selected target has no discoverable resume identity, the switch dialog
 asks before stopping the current agent and starting the target fresh with a
 handoff. This also applies to `maestro switch`. Use `prefix R` to start the
@@ -169,6 +184,8 @@ pane. Terminal fallback snapshots are labeled `terminal`. `maestro history <task
 --json` returns `task`, `sessions`, `turns`, `events` and `handoffs`. Native records
 are deduplicated across resumed launches. Persisted history remains available
 from the main repository even after the worktree or agent's source logs disappear.
+Terminal fallback capture preserves the alternate screen before teardown and
+keeps older scrollback lines at their original width after a terminal resize.
 
 Native parser coverage:
 

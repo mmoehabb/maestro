@@ -18,7 +18,7 @@ func (s *TaskService) mutateTask(ctx context.Context, slug string, mutate func(s
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("this project is busy in another Maestro process; archive tabs in the TUI with prefix d")
+		return fmt.Errorf("this project is busy in another Maestro process; use the active TUI to edit tasks")
 	}
 	defer lock.Close()
 	task, err := s.Find(ctx, slug)

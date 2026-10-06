@@ -50,6 +50,7 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		}},
 		newSwitchCmd(),
 		newHistoryCmd(),
+		newNotesCmd(),
 		&cobra.Command{Use: "push <task>", Short: "Push a task's branch", Args: cobra.ExactArgs(1), RunE: notImplemented()},
 		&cobra.Command{Use: "pr <task>", Short: "Create or open a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented()},
 		&cobra.Command{Use: "merge <task>", Short: "Merge a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented()},

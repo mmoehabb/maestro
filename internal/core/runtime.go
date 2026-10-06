@@ -33,6 +33,12 @@ type running struct {
 	seen     map[string]bool
 	saveErr  error // Only read after finished closes.
 }
+
+// Generic agents have no readiness protocol. Require output and a short live
+// startup window before accepting delivery; native turn signals or a clean exit
+// can acknowledge it earlier. Until then the handoff survives crashes/restarts.
+const handoffStartupWindow = 2 * time.Second
+
 type Runtime struct {
 	Service     *TaskService
 	Events      chan Event
@@ -388,6 +394,21 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 	last := term.Starting
 	lastDiscovery := time.Time{}
 	lastWarning := ""
+	nativeTurns := a.ID() == "codex" || a.ID() == "agy" || a.ID() == "opencode"
+	var inputWarning error
+	handoffConfirmed := false
+	confirmHandoff := func() {
+		if handoffConfirmed {
+			return
+		}
+		c, stop := context.WithTimeout(ctx, 5*time.Second)
+		defer stop()
+		if err := r.Service.Store.ConfirmHandoff(c, entry.session.ID); err != nil {
+			r.recordWriteError(entry, err)
+		} else {
+			handoffConfirmed = true
+		}
+	}
 	imported := map[string]agent.Record{}
 	// Baseline events belong to a previous launch, even if their timestamps are absent.
 	baseline := map[string]bool{}
@@ -503,6 +524,9 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 				continue
 			}
 			entry.pane.NativeEvent(e.Kind)
+			if e.Kind == "started" || e.Kind == "done" {
+				confirmHandoff()
+			}
 			if e.Kind == "done" || e.Kind == "interrupted" {
 				if err := r.Service.Store.AddEvent(c, entry.task.ID, "turn_"+e.Kind, map[string]any{"session_id": entry.session.ID, "source_key": e.Key}); err != nil {
 					r.recordWriteError(entry, err)
@@ -542,6 +566,9 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 				r.recordWriteError(entry, err)
 			}
 			stop()
+			if entry.pane.Snapshot(false).ExitCode == 0 {
+				confirmHandoff()
+			}
 			emit(entry.pane.Snapshot(false).State, nil)
 			return
 		case u, ok := <-updates:
@@ -551,7 +578,15 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 				updates = nil
 			}
 		case now := <-ticker.C:
-			state := entry.pane.Snapshot(false).State
+			paneState := entry.pane.Snapshot(false)
+			if paneState.InputError != nil && inputWarning == nil {
+				inputWarning = paneState.InputError
+				emit("", inputWarning)
+			}
+			state := paneState.State
+			if !nativeTurns && paneState.HasOutput && now.Sub(entry.session.StartedAt) >= handoffStartupWindow && (state == term.Working || state == term.Done || state == term.NeedsInput) {
+				confirmHandoff()
+			}
 			if state != last {
 				last = state
 				emit(state, nil)

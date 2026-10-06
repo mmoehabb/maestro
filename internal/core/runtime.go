@@ -129,6 +129,9 @@ func (r *Runtime) resume(ctx context.Context, task store.Task, a agent.Adapter, 
 }
 
 func (r *Runtime) start(operation context.Context, task store.Task, cols, rows int, fresh bool) (*term.Pane, error) {
+	if task.Lifecycle == "archived" {
+		return nil, fmt.Errorf("task %q is archived; use maestro reopen %s first", task.Slug, task.Slug)
+	}
 	if err := operation.Err(); err != nil {
 		return nil, err
 	}
@@ -248,6 +251,9 @@ func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target strin
 	task, err = r.Service.Find(op, task.Slug)
 	if err != nil {
 		return nil, err
+	}
+	if task.Lifecycle == "archived" {
+		return nil, fmt.Errorf("task %q is archived; reopen it first", task.Slug)
 	}
 	pending, err := r.Service.Store.PendingHandoff(op, task.ID)
 	if err != nil {

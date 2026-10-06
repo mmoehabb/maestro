@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -11,7 +12,8 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite" // Register the pure-Go SQLite driver.
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 //go:embed migrations/*.sql
@@ -40,7 +42,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if !strings.HasPrefix(u.Path, "/") {
 		u.Path = "/" + u.Path
 	}
-	q := url.Values{"_pragma": {"busy_timeout(5000)", "foreign_keys(1)", "journal_mode(WAL)"}}
+	// WAL setup can need a lock even before BEGIN IMMEDIATE. Run it explicitly
+	// in migrate so contention is retried instead of failing connection setup.
+	q := url.Values{"_pragma": {"busy_timeout(5000)", "foreign_keys(1)"}}
 	u.RawQuery = q.Encode()
 	db, err := sql.Open("sqlite", u.String())
 	if err != nil {
@@ -64,20 +68,21 @@ func (s *Store) migrate(ctx context.Context) error {
 		return err
 	}
 	defer conn.Close()
-	var beginErr error
-	for i := 0; i < 100; i++ {
-		if _, beginErr = conn.ExecContext(ctx, "BEGIN IMMEDIATE"); beginErr == nil {
-			break
-		}
-		if !strings.Contains(beginErr.Error(), "SQLITE_BUSY") {
-			return beginErr
-		}
-		time.Sleep(10 * time.Millisecond)
+	// Handle startup contention ourselves: SQLite's busy handler can sleep
+	// through context cancellation. Normal queries keep the DSN's timeout.
+	if _, err := conn.ExecContext(ctx, "PRAGMA busy_timeout=0"); err != nil {
+		return err
 	}
-	if beginErr != nil {
-		return beginErr
+	if err := execBusyRetry(ctx, conn, "PRAGMA journal_mode=WAL"); err != nil {
+		return err
+	}
+	if err := execBusyRetry(ctx, conn, "BEGIN IMMEDIATE"); err != nil {
+		return err
 	}
 	defer func() { _, _ = conn.ExecContext(context.Background(), "ROLLBACK") }()
+	if _, err := conn.ExecContext(ctx, "PRAGMA busy_timeout=5000"); err != nil {
+		return err
+	}
 	var version int
 	if err := conn.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
@@ -103,6 +108,33 @@ func (s *Store) migrate(ctx context.Context) error {
 	}
 	_, err = conn.ExecContext(ctx, "COMMIT")
 	return err
+}
+
+// SQLite can return BUSY without invoking its busy handler when upgrading a
+// lock. Retry those operations within a bounded, cancellable startup window.
+func execBusyRetry(ctx context.Context, conn *sql.Conn, query string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		_, err := conn.ExecContext(ctx, query)
+		if err != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var sqliteErr *sqlite.Error
+		if !errors.As(err, &sqliteErr) || sqliteErr.Code()&0xff != sqlite3.SQLITE_BUSY {
+			return err
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 type Project struct {

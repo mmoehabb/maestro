@@ -51,18 +51,27 @@ func newTaskCmd() *cobra.Command {
 }
 
 func newListCmd() *cobra.Command {
-	var all, asJSON bool
+	var all, archived, asJSON bool
 	cmd := &cobra.Command{
-		Use: "ls", Aliases: []string{"list"}, Short: "List tasks", Args: cobra.NoArgs,
+		Use: "ls", Aliases: []string{"list", "tabs"}, Short: "List task tabs", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := app.Open(cmd.Context(), ".", config.DefaultPaths())
 			if err != nil {
 				return err
 			}
 			defer s.Store.Close()
-			tasks, err := s.List(cmd.Context(), all)
+			tasks, err := s.List(cmd.Context(), all || archived)
 			if err != nil {
 				return err
+			}
+			if archived {
+				filtered := tasks[:0]
+				for _, task := range tasks {
+					if task.Lifecycle == "archived" {
+						filtered = append(filtered, task)
+					}
+				}
+				tasks = filtered
 			}
 			if asJSON {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(tasks)
@@ -80,6 +89,8 @@ func newListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Include archived tasks")
+	cmd.Flags().BoolVar(&archived, "archived", false, "List only archived tasks")
+	cmd.MarkFlagsMutuallyExclusive("all", "archived")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Output JSON")
 	return cmd
 }

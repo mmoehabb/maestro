@@ -49,7 +49,13 @@ type statusMsg struct {
 	values map[int64]git.Status
 	err    error
 }
-type stoppedMsg struct{ id int64 }
+type (
+	stoppedMsg  struct{ id int64 }
+	archivedMsg struct {
+		id  int64
+		err error
+	}
+)
 
 type Model struct {
 	initialAgent, manualInstruction                           string
@@ -181,6 +187,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tabs = append(m.tabs, tab{task: msg.task, state: term.Starting})
 		m.active = len(m.tabs) - 1
 		return m, m.launch(m.active, false)
+	case archivedMsg:
+		for i := range m.tabs {
+			if m.tabs[i].task.ID != msg.id {
+				continue
+			}
+			m.tabs[i].pending = false
+			if msg.err != nil {
+				m.notify(msg.err.Error())
+				return m, nil
+			}
+			slug := m.tabs[i].task.Slug
+			m.tabs = append(m.tabs[:i], m.tabs[i+1:]...)
+			if i < m.active {
+				m.active--
+			}
+			m.active = max(0, min(m.active, len(m.tabs)-1))
+			m.scroll = 0
+			m.notify("Archived " + slug + "; restore with maestro reopen " + slug)
+			break
+		}
 	case stoppedMsg:
 		for i := range m.tabs {
 			if m.tabs[i].task.ID == msg.id {
@@ -312,6 +338,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "r", "R":
 				if len(m.tabs) > 0 {
 					return m, m.launch(m.active, key == "R")
+				}
+			case "d":
+				if len(m.tabs) > 0 && !m.tabs[m.active].pending {
+					t := &m.tabs[m.active]
+					t.pending = true
+					task := t.task
+					return m, func() tea.Msg { return archivedMsg{task.ID, m.runtime.Archive(context.Background(), task)} }
 				}
 			case "x":
 				if len(m.tabs) > 0 && !m.tabs[m.active].pending {
@@ -518,7 +551,7 @@ func (m *Model) View() tea.View {
 		}
 	}
 	if m.help {
-		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
+		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  archive tab (stop agent, preserve worktree)\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
 		cursor = nil
 	}
 	if m.dialog != nil {

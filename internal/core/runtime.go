@@ -198,7 +198,7 @@ func (r *Runtime) start(operation context.Context, task store.Task, cols, rows i
 		if err = handoff.Write(task.Worktree, content); err != nil {
 			return nil, err
 		}
-		prompt = handoff.Instruction
+		prompt = handoff.Prompt(task.Worktree)
 	}
 	if cfg.ManualPrompt {
 		prompt = ""
@@ -304,7 +304,7 @@ func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target strin
 		return nil, err
 	}
 	// Validate argument templates before stopping the outgoing agent.
-	prompt := handoff.Instruction
+	prompt := handoff.Prompt(task.Worktree)
 	if r.Service.Config.Agents[target].ManualPrompt {
 		prompt = ""
 	}

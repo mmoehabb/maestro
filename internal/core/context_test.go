@@ -255,8 +255,8 @@ func TestContextSwitchResumeAndHistorySurvivesDeletion(t *testing.T) {
 	if err != nil || !strings.Contains(string(b), "login fix") {
 		t.Fatal("context missing", string(b), err)
 	}
-	if !strings.Contains(strings.Join(p.Scrollback(), "\n"), "Read .maestro/handoff.md") {
-		t.Fatal("handoff instruction not delivered")
+	if !strings.Contains(strings.ReplaceAll(strings.Join(p.Scrollback(), ""), "\n", ""), "handoff.md first") {
+		t.Fatalf("handoff instruction not delivered. Expected: %s\nGot: %s", handoff.Prompt(task.Worktree), strings.Join(p.Scrollback(), "\n"))
 	}
 	sendLine(p, "work")
 	time.Sleep(1200 * time.Millisecond)
@@ -370,7 +370,7 @@ func TestSwitchPreflightAndPendingRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitPane(t, p, term.Done, "ready agy new")
-	if !strings.Contains(strings.Join(p.Scrollback(), "\n"), strings.Split(handoff.Instruction, ".")[0]) {
+	if !strings.Contains(strings.ReplaceAll(strings.Join(p.Scrollback(), ""), "\n", ""), "handoff.md first") {
 		t.Fatal("retry lost handoff prompt")
 	}
 	sendLine(p, "work") // Native targets acknowledge delivery with a new turn.
@@ -468,8 +468,8 @@ func TestSwitchFreshRecoversSelectedTarget(t *testing.T) {
 	if err != nil || current.Agent != "agy" {
 		t.Fatal(current, err)
 	}
-	if !strings.Contains(strings.Join(fresh.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
-		t.Fatal("fresh target did not receive handoff")
+	if !strings.Contains(strings.ReplaceAll(strings.Join(fresh.Scrollback(), ""), "\n", ""), "handoff.md first") {
+		t.Fatalf("fresh target did not receive handoff. Got: %s", strings.Join(fresh.Scrollback(), "\n"))
 	}
 }
 
@@ -501,7 +501,7 @@ func TestFreshRestartPreservesPendingContext(t *testing.T) {
 				t.Fatal(err)
 			}
 			awaitPane(t, p, term.Done, "ready agy new")
-			if !strings.Contains(strings.Join(p.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
+			if !strings.Contains(strings.ReplaceAll(strings.Join(p.Scrollback(), ""), "\n", ""), "handoff.md first") {
 				t.Fatal("fresh agent did not receive handoff instruction")
 			}
 			content, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
@@ -600,7 +600,7 @@ func TestSwitchSessionCreationFailureRetainsHandoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitPane(t, p, term.Done, "ready agy new")
-	if !strings.Contains(strings.Join(p.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
+	if !strings.Contains(strings.ReplaceAll(strings.Join(p.Scrollback(), ""), "\n", ""), "handoff.md first") {
 		t.Fatal("session creation retry lost handoff instruction")
 	}
 }
@@ -753,7 +753,7 @@ func TestSwitchRejectsUndeliverableHandoff(t *testing.T) {
 				mode = "resume"
 			}
 			awaitPane(t, p, term.Done, "ready agy "+mode)
-			if !strings.Contains(strings.Join(p.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
+			if !strings.Contains(strings.ReplaceAll(strings.Join(p.Scrollback(), ""), "\n", ""), "handoff.md first") {
 				t.Fatal("handoff instruction not delivered")
 			}
 		})
@@ -807,7 +807,7 @@ func TestStartupCrashRetainsHandoffAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitPane(t, p, term.Done, "ready agy new")
-	if !strings.Contains(strings.Join(p.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
+	if !strings.Contains(strings.ReplaceAll(strings.Join(p.Scrollback(), ""), "\n", ""), "handoff.md first") {
 		t.Fatal("recovery lost handoff instruction")
 	}
 	sendLine(p, "work")

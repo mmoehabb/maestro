@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mmoehabb/maestro/internal/config"
+	"github.com/mmoehabb/maestro/internal/term"
 )
 
 func TestTranscriptFixtures(t *testing.T) {
@@ -44,6 +46,59 @@ func TestTranscriptFixtures(t *testing.T) {
 				if r.Key == "" || r.TS.IsZero() {
 					t.Fatal("missing identity/timestamp", r)
 				}
+			}
+		})
+	}
+}
+
+func TestOpenCodeCompletionActivity(t *testing.T) {
+	for _, tc := range []struct {
+		name, failure, finish, want string
+		completed                   int64
+	}{
+		{"cancelled", `{"name":"MessageAbortedError","data":{"message":"Aborted"}}`, "", "interrupted", 2000},
+		{"api error", `{"name":"APIError","data":{"message":"Unavailable"}}`, "", "interrupted", 2000},
+		{"error after tools", `{"name":"APIError"}`, "tool-calls", "interrupted", 2000},
+		{"error with finish", `{"name":"APIError"}`, "error", "interrupted", 2000},
+		{"unfinished error", `{"name":"APIError"}`, "", "", 0},
+		{"normal completion", "null", "stop", "done", 2000},
+		{"tool step", "null", "tool-calls", "", 2000},
+		{"unknown finish", "null", "unknown", "", 2000},
+		{"no finish", "null", "", "", 2000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := fmt.Sprintf(`{"info":{"id":"test"},"messages":[
+				{"info":{"id":"user","role":"user","time":{"created":1000}},"parts":[]},
+				{"info":{"id":"assistant","role":"assistant","error":%s,"finish":%q,"time":{"created":1100,"completed":%d}},"parts":[]}
+			]}`, tc.failure, tc.finish, tc.completed)
+			transcript, err := parseOpenCode([]byte(data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantEvents := 1
+			if tc.want != "" {
+				wantEvents++
+			}
+			if len(transcript.Events) != wantEvents || transcript.Events[0].Kind != "started" {
+				t.Fatal("unexpected turn events", transcript.Events)
+			}
+			if tc.want != "" {
+				event := transcript.Events[1]
+				if event.Kind != tc.want || event.Key != "assistant:"+tc.want || !event.TS.Equal(time.UnixMilli(tc.completed)) {
+					t.Fatal("incorrect completion event", event)
+				}
+			}
+			activity := term.Activity{State: term.Starting, IdleAfter: time.Second}
+			for _, event := range transcript.Events {
+				activity.NativeEvent(event.Kind)
+			}
+			activity.Tick(time.Now().Add(time.Hour))
+			wantState := term.Working
+			if tc.want != "" {
+				wantState = term.Done
+			}
+			if activity.State != wantState || activity.NativeWorking != (wantState == term.Working) {
+				t.Fatalf("activity = %+v, want %s", activity, wantState)
 			}
 		})
 	}

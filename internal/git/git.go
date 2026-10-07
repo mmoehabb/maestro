@@ -76,6 +76,20 @@ type WorktreeSpec struct {
 	Copy, Setup        []string
 }
 
+// StableBase keeps named branches usable as comparison targets, while resolving
+// checkout-relative revisions such as HEAD and HEAD~1 in the source checkout.
+func (r Repo) StableBase(ctx context.Context, base string) (string, error) {
+	commit, err := run(ctx, r.Root, "rev-parse", "--verify", "--end-of-options", base+"^{commit}")
+	if err != nil {
+		return "", fmt.Errorf("invalid base %q (the repository needs an initial commit): %w", base, err)
+	}
+	ref, err := run(ctx, r.Root, "rev-parse", "--symbolic-full-name", "--verify", "--end-of-options", base)
+	if err == nil && (ref == "refs/heads/"+base || ref == "refs/remotes/"+base || (ref == base && (strings.HasPrefix(ref, "refs/heads/") || strings.HasPrefix(ref, "refs/remotes/")))) {
+		return base, nil
+	}
+	return commit, nil
+}
+
 func (r Repo) CreateWorktree(ctx context.Context, spec WorktreeSpec) error {
 	if _, err := run(ctx, r.Root, "check-ref-format", "--branch", spec.Branch); err != nil {
 		return err

@@ -98,6 +98,34 @@ func TestEmulatorInputModes(t *testing.T) {
 	}
 }
 
+func TestEmulatorTracksMouseReporting(t *testing.T) {
+	e := NewEmulator(80, 24, func() {})
+	defer e.Close()
+	for _, tc := range []struct {
+		output string
+		want   bool
+	}{
+		{"\x1b[?1006h", false}, // Encoding alone does not request mouse reporting.
+		{"\x1b[?1000", false},
+		{";1002h", true}, // A split sequence with combined parameters.
+		{"\x1b[?1000l", true},
+		{"\x1b[?1002l", false},
+		{"\x1b[?9h", true},
+		{"\x1b[?9l", false},
+		{"\x1b[?1001h", true},
+		{"\x1b[?1001l", false},
+		{"\x1b[?1003h", true},
+		{"\x1bc", false}, // A full reset also resets reporting.
+	} {
+		if _, err := io.WriteString(e, tc.output); err != nil {
+			t.Fatal(err)
+		}
+		if got := e.MouseReporting(); got != tc.want {
+			t.Fatalf("after %q: reporting=%v, want %v", tc.output, got, tc.want)
+		}
+	}
+}
+
 func TestPrefixFallback(t *testing.T) {
 	if ActivePrefix("ctrl+m", "ctrl+b", false) != "ctrl+b" || ActivePrefix("ctrl+m", "ctrl+b", true) != "ctrl+m" {
 		t.Fatal("bad prefix negotiation")

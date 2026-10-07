@@ -20,28 +20,35 @@ type Emulator interface {
 	Scrollback() []string
 	Title() string
 	KeyboardMode() int
+	MouseReporting() bool
 	Key(uv.Key, bool)
 	Paste(string)
 	Mouse(uv.Mouse, bool, bool)
 }
 
 type virtualTerminal struct {
-	vt      *vt.Emulator
-	title   string
-	visible bool
-	flags   int
-	stack   []int
-	lastAlt string
+	vt         *vt.Emulator
+	title      string
+	visible    bool
+	flags      int
+	stack      []int
+	lastAlt    string
+	mouseModes map[int]bool
 }
 
 func NewEmulator(cols, rows int, complete func()) Emulator {
-	e := &virtualTerminal{vt: vt.NewEmulator(cols, rows), visible: true}
+	e := &virtualTerminal{vt: vt.NewEmulator(cols, rows), visible: true, mouseModes: map[int]bool{}}
 	e.vt.SetScrollbackSize(10000)
 	e.vt.SetCallbacks(vt.Callbacks{Title: func(s string) { e.title = s }, CursorVisibility: func(v bool) { e.visible = v }, Bell: complete})
 	// Observe destructive operations before vt's default handlers switch or
 	// clear the screen. Returning false preserves normal terminal semantics,
 	// including sequences split across PTY reads and combined mode parameters.
+	e.vt.RegisterCsiHandler(ansi.Command('?', 0, 'h'), func(p ansi.Params) bool {
+		e.trackMouseModes(p, true)
+		return false
+	})
 	e.vt.RegisterCsiHandler(ansi.Command('?', 0, 'l'), func(p ansi.Params) bool {
+		e.trackMouseModes(p, false)
 		for i := range p {
 			mode, _, _ := p.Param(i, 0)
 			if mode == 1047 || mode == 1049 {
@@ -58,7 +65,11 @@ func NewEmulator(cols, rows int, complete func()) Emulator {
 		}
 		return false
 	})
-	e.vt.RegisterEscHandler(ansi.Command(0, 0, 'c'), func() bool { e.preserveAltScreen(); return false })
+	e.vt.RegisterEscHandler(ansi.Command(0, 0, 'c'), func() bool {
+		e.preserveAltScreen()
+		clear(e.mouseModes)
+		return false
+	})
 	for _, osc := range []int{9, 777} {
 		e.vt.RegisterOscHandler(osc, func([]byte) bool { complete(); return true })
 	}
@@ -102,11 +113,27 @@ func (e *virtualTerminal) Read(b []byte) (int, error)  { return e.vt.Read(b) }
 
 // Close the pipe directly: vt.Close mutates an unsynchronized flag also read by
 // its independent Read goroutine. The wrapper owns the emulator lifetime.
-func (e *virtualTerminal) Close() error      { return e.vt.InputPipe().(io.Closer).Close() }
-func (e *virtualTerminal) Resize(c, r int)   { e.vt.Resize(c, r) }
-func (e *virtualTerminal) Render() string    { return e.vt.Render() }
-func (e *virtualTerminal) Title() string     { return e.title }
-func (e *virtualTerminal) KeyboardMode() int { return e.flags }
+func (e *virtualTerminal) Close() error         { return e.vt.InputPipe().(io.Closer).Close() }
+func (e *virtualTerminal) Resize(c, r int)      { e.vt.Resize(c, r) }
+func (e *virtualTerminal) Render() string       { return e.vt.Render() }
+func (e *virtualTerminal) Title() string        { return e.title }
+func (e *virtualTerminal) KeyboardMode() int    { return e.flags }
+func (e *virtualTerminal) MouseReporting() bool { return len(e.mouseModes) != 0 }
+
+func (e *virtualTerminal) trackMouseModes(p ansi.Params, enabled bool) {
+	for i := range p {
+		mode, _, _ := p.Param(i, 0)
+		switch mode {
+		case 9, 1000, 1001, 1002, 1003:
+			if enabled {
+				e.mouseModes[mode] = true
+			} else {
+				delete(e.mouseModes, mode)
+			}
+		}
+	}
+}
+
 func (e *virtualTerminal) Cursor() (int, int, bool) {
 	p := e.vt.CursorPosition()
 	return p.X, p.Y, e.visible

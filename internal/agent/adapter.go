@@ -12,7 +12,7 @@ import (
 var ErrUnsupported = errors.New("native transcript unavailable; using terminal history")
 
 // ParserVersion changes when the normalized interpretation of source records changes.
-const ParserVersion = 1
+const ParserVersion = 2
 
 type Record struct {
 	Key, Role, Content, ToolCallID string

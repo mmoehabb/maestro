@@ -12,13 +12,14 @@ import (
 )
 
 type Snapshot struct {
-	State         State
-	Screen, Title string
-	X, Y          int
-	CursorVisible bool
-	ExitCode      int
-	InputError    error
-	HasOutput     bool
+	State          State
+	Screen, Title  string
+	X, Y           int
+	CursorVisible  bool
+	ExitCode       int
+	InputError     error
+	HasOutput      bool
+	MouseReporting bool
 }
 
 type Pane struct {
@@ -140,7 +141,7 @@ func (p *Pane) Snapshot(render bool) Snapshot {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.activity.Tick(time.Now())
-	s := Snapshot{State: p.activity.State, Title: p.emu.Title(), ExitCode: p.exitCode, InputError: p.input.Err(), HasOutput: p.hasOutput}
+	s := Snapshot{State: p.activity.State, Title: p.emu.Title(), ExitCode: p.exitCode, InputError: p.input.Err(), HasOutput: p.hasOutput, MouseReporting: p.emu.MouseReporting()}
 	if render {
 		s.Screen = p.emu.Render()
 		s.X, s.Y, s.CursorVisible = p.emu.Cursor()

@@ -338,8 +338,19 @@ func parseOpenCode(b []byte) (Transcript, error) {
 				}
 			}
 		}
-		if m.Info.Role == "assistant" && m.Info.Time.Completed > 0 && m.Info.Finish != "" && m.Info.Finish != "tool-calls" && m.Info.Finish != "unknown" {
-			t.Events = append(t.Events, TurnEvent{Key: m.Info.ID + ":done", Kind: "done", TS: time.UnixMilli(m.Info.Time.Completed)})
+		if m.Info.Role == "assistant" && m.Info.Time.Completed > 0 {
+			kind := ""
+			failure := bytes.TrimSpace(m.Info.Error)
+			switch {
+			case len(failure) > 0 && !bytes.Equal(failure, []byte("null")):
+				// Cancellation and terminal errors can complete without a finish reason.
+				kind = "interrupted"
+			case m.Info.Finish != "" && m.Info.Finish != "tool-calls" && m.Info.Finish != "unknown":
+				kind = "done"
+			}
+			if kind != "" {
+				t.Events = append(t.Events, TurnEvent{Key: m.Info.ID + ":" + kind, Kind: kind, TS: time.UnixMilli(m.Info.Time.Completed)})
+			}
 		}
 	}
 	return t, nil

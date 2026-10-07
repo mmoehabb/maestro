@@ -441,9 +441,9 @@ P0, P1 and the P2 implementation are delivered. Authenticated live P2 acceptance
 
 - Layered TOML defaults/global/repo configuration, validation, and per-task CLI overrides.
 - SQLite migration with WAL and foreign keys; project/task/session persistence, atomic creation/start events, exit status and terminal fallback history.
-- Main/linked-worktree project identity, collision-resistant data paths, branch/worktree creation, safe file copies, setup commands and shared handoff exclusion.
+- Main/linked-worktree project identity, collision-resistant data paths, branch/worktree creation, stable commit bases for relative revisions such as `HEAD`, safe file copies, setup commands and shared handoff exclusion.
 - Generic agent detection and shell-free new/resume argument rendering; generated IDs and session-ID files for custom agents, plus minimal native identity discovery for Codex, agy and OpenCode.
-- PTY/ConPTY panes behind an emulator interface, ANSI/alternate-screen rendering, keyboard negotiation and kitty/legacy forwarding, bracketed paste, mouse passthrough, resize and bounded scrollback.
+- PTY/ConPTY panes behind an emulator interface, ANSI/alternate-screen rendering, keyboard negotiation and kitty/legacy forwarding, bracketed paste, mouse passthrough with negotiated wheel routing and explicit Maestro scroll mode, resize and bounded scrollback.
 - Tabs, status bar, agent picker/new-task dialog, help, scroll/copy mode, activity icons, background notifications and periodic Git status refresh.
 - TUI lifetime locking, launch/stop/restart, three-tab restoration by native session ID, graceful stop with process-tree cleanup, and explicit fresh-start recovery when resume metadata is missing.
 - Functional root/open/new/ls/config/config-path/doctor commands; interactive doctor keyboard negotiation and agent-version checks.
@@ -459,11 +459,12 @@ P2 implementation includes:
 
 - A configured-agent registry with versioned Codex, agy and OpenCode transcript parsers; filesystem watching and periodic export reconciliation, malformed-format fallback, and synthetic fixtures. OpenCode additionally supports its observed SQLite schema in strictly read-only mode when the CLI produces no usable JSON.
 - SQLite migration v2 separating native conversation identity from process launches, source-key transcript upserts, consistent history snapshots, persisted handoffs and agent-specific resume lookup. Existing P1 terminal history is retained.
-- Native turn activity precedence, per-task operation serialization, stale-pane event filtering, final history flush on stop, and pending-handoff recovery after launch/write failure.
+- Native turn activity precedence, including interrupted events for completed OpenCode cancellations/errors, per-task operation serialization, stale-pane event filtering, final history flush on stop, and pending-handoff recovery after launch/write failure.
 - Pending handoffs also survive early startup crashes; delivery is acknowledged by a new native turn, clean exit, or an active pane surviving a two-second startup window for generic agents without native turn adapters.
+- Switch retries regenerate pending briefs from current notes, saved history and Git state. Fresh replacements receive a new handoff after the outgoing agent's final output is saved, even when its clean exit acknowledges the earlier brief.
 - Multiline task notes through `prefix n` (Ctrl+S save, Esc cancel) and `maestro notes` (`--set` / `--file`, including stdin), with locked writes, timeline events, and inclusion in subsequent handoffs.
 - Deterministic budgeted handoffs including goal, notes, recent conversation, explicit TODO mentions and Git state. `[handoff] token_budget` defaults to 6000; the conservative estimator counts one UTF-8 byte per token. Smart summarization is deferred.
-- `prefix a` switch/confirmation dialog, `prefix h` expandable history, `prefix H` manual-prompt handoff copy, `maestro history [--json]`, and `maestro switch <task> -a <agent>` opening the focused TUI under the existing project lock.
+- `prefix a` switch/confirmation dialog, `prefix h` expandable history with selected sessions kept visible during navigation, `prefix H` manual-prompt handoff copy, `maestro history [--json]`, and `maestro switch <task> -a <agent>` opening the focused TUI under the existing project lock.
 - Fixture/parser tests; P1 migration and transcript ownership tests; handoff budget/symlink tests; a fake-agent Codex → agy → Codex integration test; failure recovery and concurrent lifecycle tests; history retention after deleting the worktree/source logs and reopening the database; CLI history while locked; and switch/history snapshots at both viewport sizes.
 
 P2 verification separates automated fixture/PTY tests and read-only local parser compatibility checks from authenticated live conversations. The latter, along with native Windows/macOS terminal execution, remain manual checks. Archive/reopen and handoff-file archival remain P3; SQLite already retains the handoff contents.

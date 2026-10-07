@@ -103,7 +103,7 @@ func (r *Runtime) Start(task store.Task, cols, rows int, fresh bool) (*term.Pane
 	if err != nil {
 		return nil, err
 	}
-	return r.start(r.ctx, task, cols, rows, fresh)
+	return r.start(r.ctx, task, cols, rows, fresh, nil)
 }
 
 func (r *Runtime) adapter(name string) (agent.Adapter, error) {
@@ -134,7 +134,10 @@ func (r *Runtime) resume(ctx context.Context, task store.Task, a agent.Adapter, 
 	return previous, id, nil
 }
 
-func (r *Runtime) start(operation context.Context, task store.Task, cols, rows int, fresh bool) (*term.Pane, error) {
+// handoffFrom requests a context transfer even if stopping the outgoing agent
+// acknowledged its pending handoff. A nil value still refreshes pending retries
+// and supplies saved context when explicitly replacing an existing session.
+func (r *Runtime) start(operation context.Context, task store.Task, cols, rows int, fresh bool, handoffFrom *int64) (*term.Pane, error) {
 	if task.Lifecycle == "archived" {
 		return nil, fmt.Errorf("task %q is archived; use maestro reopen %s first", task.Slug, task.Slug)
 	}
@@ -172,15 +175,6 @@ func (r *Runtime) start(operation context.Context, task store.Task, cols, rows i
 		}
 	}
 	isNew := nativeID == ""
-	if isNew && cfg.GenerateSessionID {
-		nativeID = uuid.NewString()
-	}
-	if isNew && len(cfg.SessionCreate) > 0 {
-		nativeID, err = a.CreateSession(ctx, task.Worktree)
-		if err != nil {
-			return nil, err
-		}
-	}
 	prompt := ""
 	if isNew {
 		prompt = task.Prompt
@@ -189,14 +183,36 @@ func (r *Runtime) start(operation context.Context, task store.Task, cols, rows i
 	if err != nil {
 		return nil, err
 	}
-	if pending.ID != 0 {
-		if err = handoff.Write(task.Worktree, pending.Content); err != nil {
+	if pending.ID != 0 || handoffFrom != nil || (fresh && previous.ID != 0) {
+		from := previous.ID
+		if handoffFrom != nil {
+			from = *handoffFrom
+		}
+		if pending.ID != 0 && pending.Agent == task.Agent {
+			from = pending.FromSession
+		}
+		content, e := r.prepareHandoff(ctx, task, from)
+		if e != nil {
+			return nil, e
+		}
+		if err = handoff.Write(task.Worktree, content); err != nil {
 			return nil, err
 		}
 		prompt = handoff.Instruction
 	}
 	if cfg.ManualPrompt {
 		prompt = ""
+	}
+	// Persist the handoff before allocating a native session, so a failed
+	// session_create command leaves the selected target and context recoverable.
+	if isNew && cfg.GenerateSessionID {
+		nativeID = uuid.NewString()
+	}
+	if isNew && len(cfg.SessionCreate) > 0 {
+		nativeID, err = a.CreateSession(ctx, task.Worktree)
+		if err != nil {
+			return nil, err
+		}
 	}
 	seen := map[string]bool{}
 	if !isNew {
@@ -269,7 +285,7 @@ func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target strin
 		if old := r.entry(task.ID); old != nil {
 			return old.pane, nil
 		}
-		return r.start(op, task, cols, rows, false)
+		return r.start(op, task, cols, rows, false, nil)
 	}
 	candidate := task
 	candidate.Agent = target
@@ -335,23 +351,25 @@ func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target strin
 			}
 		}
 	}
-	if pending.ID == 0 || pending.Agent != target {
-		history, e := r.Service.Store.History(op, task)
-		if e != nil {
-			return nil, e
-		}
-		gitCtx, stopGit := context.WithTimeout(op, 5*time.Second)
-		state, e := git.Context(gitCtx, task.Worktree, task.BaseBranch)
-		stopGit()
-		if e != nil {
-			return nil, e
-		}
-		content := handoff.Build(history, state, target, r.Service.Config.Handoff.TokenBudget)
-		if e = r.Service.Store.PrepareHandoff(op, task.ID, previous.ID, target, content); e != nil {
-			return nil, e
-		}
+	return r.start(op, candidate, cols, rows, fresh, &previous.ID)
+}
+
+func (r *Runtime) prepareHandoff(ctx context.Context, task store.Task, from int64) (string, error) {
+	history, err := r.Service.Store.History(ctx, task)
+	if err != nil {
+		return "", err
 	}
-	return r.start(op, candidate, cols, rows, fresh)
+	gitCtx, stopGit := context.WithTimeout(ctx, 5*time.Second)
+	state, err := git.Context(gitCtx, task.Worktree, task.BaseBranch)
+	stopGit()
+	if err != nil {
+		return "", err
+	}
+	content := handoff.Build(history, state, task.Agent, r.Service.Config.Handoff.TokenBudget)
+	if err = r.Service.Store.PrepareHandoff(ctx, task.ID, from, task.Agent, content); err != nil {
+		return "", err
+	}
+	return content, nil
 }
 
 func (r *Runtime) emit(e Event) {

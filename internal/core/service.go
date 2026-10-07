@@ -128,6 +128,10 @@ func (s *TaskService) create(ctx context.Context, in NewTask) (store.Task, error
 			return store.Task{}, fmt.Errorf("task %q already exists; choose a different title", slug)
 		}
 	}
+	in.Base, err = s.Repo.StableBase(ctx, in.Base)
+	if err != nil {
+		return store.Task{}, err
+	}
 	t := store.Task{
 		ProjectID: s.Project.ID, Slug: slug, Title: in.Title, Goal: in.Prompt,
 		Agent: in.Agent, Prompt: in.Prompt, BaseBranch: in.Base, Branch: s.Config.Worktree.BranchPrefix + slug,

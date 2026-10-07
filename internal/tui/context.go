@@ -43,6 +43,7 @@ type historyView struct {
 	expanded         map[int64]bool
 	tools            bool
 	offset, selected int
+	revealSelection  bool
 	loading          bool
 	err              string
 }
@@ -189,17 +190,18 @@ func (m *Model) historyKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "tab":
 		if len(h.data.Sessions) > 0 {
 			h.selected = (h.selected + 1) % len(h.data.Sessions)
-			h.offset = 0
+			h.revealSelection = true
 		}
 	case "shift+tab":
 		if len(h.data.Sessions) > 0 {
 			h.selected = (h.selected + len(h.data.Sessions) - 1) % len(h.data.Sessions)
-			h.offset = 0
+			h.revealSelection = true
 		}
 	case "enter", "space":
 		if len(h.data.Sessions) > 0 {
 			id := h.data.Sessions[h.selected].ID
 			h.expanded[id] = !h.expanded[id]
+			h.revealSelection = true
 		}
 	case "t":
 		h.tools = !h.tools
@@ -225,10 +227,12 @@ func (h *historyView) View(width, height int) string {
 	if len(h.data.Sessions) == 0 {
 		b.WriteString("No agent sessions yet.\n")
 	}
+	selectedOffset := -1
 	for i, s := range h.data.Sessions {
 		mark := " "
 		if h.selected == i {
 			mark = "›"
+			selectedOffset = b.Len() + 1 // The session header follows a blank line.
 		}
 		expand := "+"
 		if h.expanded[s.ID] {
@@ -256,9 +260,21 @@ func (h *historyView) View(width, height int) string {
 		}
 		b.WriteString("\n")
 	}
-	lines := strings.Split(ansi.Wrap(b.String(), max(1, width), ""), "\n")
-	h.offset = min(h.offset, max(0, len(lines)-max(1, height)))
-	return strings.Join(lines[h.offset:min(len(lines), h.offset+max(1, height))], "\n")
+	width, height = max(1, width), max(1, height)
+	content := b.String()
+	lines := strings.Split(ansi.Wrap(content, width, ""), "\n")
+	if h.revealSelection {
+		if selectedOffset >= 0 {
+			// Count rendered rows, including wrapped events and expanded turns.
+			row := strings.Count(ansi.Wrap(content[:selectedOffset], width, ""), "\n")
+			if row < h.offset || row >= h.offset+height {
+				h.offset = row
+			}
+		}
+		h.revealSelection = false
+	}
+	h.offset = min(h.offset, max(0, len(lines)-height))
+	return strings.Join(lines[h.offset:min(len(lines), h.offset+height)], "\n")
 }
 
 func (m *Model) contextMessage(msg tea.Msg) bool {

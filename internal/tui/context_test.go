@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,42 @@ func TestContextModalRouting(t *testing.T) {
 	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.switcher != nil {
 		t.Fatal("picker did not close")
+	}
+}
+
+func TestHistorySelectionStaysVisible(t *testing.T) {
+	for _, size := range []struct{ w, h int }{{40, 12}, {80, 20}, {160, 44}} {
+		t.Run(fmt.Sprintf("%dx%d", size.w, size.h), func(t *testing.T) {
+			m := testModel(t)
+			m.width, m.height = size.w, size.h+4
+			h := fixtureHistory()
+			for range 60 {
+				h.Events = append(h.Events, store.TimelineEvent{Kind: "turn_done", TS: h.Events[0].TS})
+			}
+			h.Turns = append(h.Turns, store.Turn{SessionID: 1, Role: "assistant", Content: strings.Repeat("A long response that wraps across narrow viewports. ", 100)})
+			m.history = &historyView{data: h, expanded: map[int64]bool{1: true}, offset: 30}
+			press := func(code rune, mod tea.KeyMod, selected string) {
+				t.Helper()
+				_, _ = m.Update(tea.KeyPressMsg{Code: code, Mod: mod})
+				view := m.history.View(size.w, size.h)
+				if !strings.Contains(view, selected) {
+					t.Fatalf("selected session hidden:\n%s", view)
+				}
+			}
+			press(tea.KeyTab, 0, "› + agy")
+			press(tea.KeyTab, tea.ModShift, "› − codex")
+			// Manual scrolling must remain possible after revealing a selection.
+			offset := m.history.offset
+			_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			m.history.View(size.w, size.h)
+			if m.history.offset != offset+1 {
+				t.Fatal("selection prevented manual scrolling")
+			}
+			// Collapsing a session whose header was scrolled away reveals it again.
+			press(tea.KeyEnter, 0, "› + codex")
+			press(tea.KeyTab, tea.ModShift, "› + agy") // Wrap backwards.
+			press(tea.KeyTab, 0, "› + codex")          // Wrap forwards.
+		})
 	}
 }
 

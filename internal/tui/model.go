@@ -463,19 +463,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if mouse.Button == tea.MouseWheelUp {
-			m.scroll += 3
-			return m, nil
-		}
-		if mouse.Button == tea.MouseWheelDown && m.scroll > 0 {
-			m.scroll = max(0, m.scroll-3)
-			return m, nil
-		}
-		if mouse.Y >= 2 && mouse.Y < m.height-2 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil && m.scroll == 0 {
-			mouse.Y -= 2
-			_, release := msg.(tea.MouseReleaseMsg)
-			_, motion := msg.(tea.MouseMotionMsg)
-			m.tabs[m.active].pane.Mouse(uv.Mouse(mouse), release, motion)
+		if mouse.Y >= 2 && mouse.Y < m.height-2 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+			pane := m.tabs[m.active].pane
+			if mouse.Button == tea.MouseWheelUp || mouse.Button == tea.MouseWheelDown {
+				state := pane.Snapshot(false)
+				if m.scroll > 0 || !state.MouseReporting || state.State == term.Exited || state.State == term.Crashed {
+					if mouse.Button == tea.MouseWheelUp {
+						m.scroll += 3
+					} else {
+						m.scroll = max(0, m.scroll-3)
+					}
+					return m, nil
+				}
+			}
+			if m.scroll == 0 {
+				mouse.Y -= 2
+				_, release := msg.(tea.MouseReleaseMsg)
+				_, motion := msg.(tea.MouseMotionMsg)
+				pane.Mouse(uv.Mouse(mouse), release, motion)
+			}
 		}
 	}
 	if m.notes != nil && !m.notes.busy {

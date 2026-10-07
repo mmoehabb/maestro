@@ -20,6 +20,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/app"
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
+	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/handoff"
 	"github.com/mmoehabb/maestro/internal/store"
 	"github.com/mmoehabb/maestro/internal/term"
@@ -170,6 +171,56 @@ func awaitPane(t *testing.T, p *term.Pane, state term.State, text string) {
 	t.Fatalf("pane did not reach %s/%q: %+v", state, text, p.Snapshot(true))
 }
 func sendLine(p *term.Pane, s string) { p.Paste(s); p.Key(uv.Key{Code: uv.KeyEnter}, false) }
+
+func TestTaskBasePreservesGitContext(t *testing.T) {
+	for _, base := range []string{"HEAD", "@", "HEAD~1", "main~1", "main", "origin/main", "detached default"} {
+		t.Run(base, func(t *testing.T) {
+			s, r, _ := contextRuntime(t)
+			ctx := context.Background()
+			testutil.Git(t, s.Repo.Root, "commit", "--allow-empty", "-m", "advance source")
+			testutil.Git(t, s.Repo.Root, "update-ref", "refs/remotes/origin/main", "HEAD")
+			requested := base
+			if base == "detached default" {
+				testutil.Git(t, s.Repo.Root, "checkout", "--detach")
+				var err error
+				s.Repo, err = git.Discover(ctx, s.Repo.Root)
+				if err != nil {
+					t.Fatal(err)
+				}
+				requested = ""
+			}
+			task, err := r.Create(ctx, core.NewTask{Title: "Base context", Agent: "codex", Base: requested})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (base == "main" || base == "origin/main") && task.BaseBranch != base {
+				t.Fatal("named base changed", task.BaseBranch)
+			}
+			if err = os.WriteFile(filepath.Join(task.Worktree, "base-fix.txt"), []byte("committed task work\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			testutil.Git(t, task.Worktree, "add", "base-fix.txt")
+			testutil.Git(t, task.Worktree, "commit", "-m", "implement-base-context-task")
+			status, err := s.Status(ctx, task)
+			if err != nil || status.Commits != 1 {
+				t.Fatal("base hid task commit", task.BaseBranch, status, err)
+			}
+			saved, err := s.Find(ctx, task.Slug)
+			if err != nil || saved.BaseBranch != task.BaseBranch {
+				t.Fatal("stable base was not persisted", saved, err)
+			}
+			p, err := r.Switch(ctx, saved, "agy", 80, 24, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			awaitPane(t, p, term.Done, "ready agy new")
+			brief, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
+			if err != nil || !strings.Contains(string(brief), "implement-base-context-task") || !strings.Contains(string(brief), "base-fix.txt") {
+				t.Fatal("handoff lost committed Git context", string(brief), err)
+			}
+		})
+	}
+}
 
 func TestContextSwitchResumeAndHistorySurvivesDeletion(t *testing.T) {
 	s, r, task := contextRuntime(t)
@@ -419,6 +470,138 @@ func TestSwitchFreshRecoversSelectedTarget(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(fresh.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
 		t.Fatal("fresh target did not receive handoff")
+	}
+}
+
+func TestFreshRestartPreservesPendingContext(t *testing.T) {
+	for _, mode := range []string{"switch", "restart"} {
+		t.Run(mode, func(t *testing.T) {
+			s, r, task := contextRuntime(t)
+			ctx := context.Background()
+			p, err := r.Start(task, 80, 24, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			awaitPane(t, p, term.Done, "ready codex new")
+			p, err = r.Switch(ctx, task, "agy", 80, 24, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			awaitPane(t, p, term.Done, "ready agy new")
+			pending, err := s.Store.PendingHandoff(ctx, task.ID)
+			if err != nil || pending.ID == 0 {
+				t.Fatal("expected unacknowledged handoff", pending, err)
+			}
+			if mode == "switch" {
+				p, err = r.SwitchFresh(ctx, task, "agy", 80, 24, true)
+			} else {
+				p, err = r.Start(task, 80, 24, true)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			awaitPane(t, p, term.Done, "ready agy new")
+			if !strings.Contains(strings.Join(p.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
+				t.Fatal("fresh agent did not receive handoff instruction")
+			}
+			content, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
+			if err != nil || !strings.Contains(string(content), "Final context saved on stop.") {
+				t.Fatal("fresh handoff lost final output", string(content), err)
+			}
+			history, err := s.History(ctx, task.Slug)
+			if err != nil || len(history.Handoffs) != 2 || history.Handoffs[0].DeliveredAt == nil || history.Handoffs[1].DeliveredAt != nil {
+				t.Fatal("fresh launch did not retain the old and new handoffs", history.Handoffs, err)
+			}
+		})
+	}
+}
+
+func TestPendingHandoffRetryUsesCurrentContext(t *testing.T) {
+	for _, mode := range []string{"switch", "resume", "fresh"} {
+		t.Run(mode, func(t *testing.T) {
+			s, r, task := contextRuntime(t)
+			ctx := context.Background()
+			p, err := r.Start(task, 80, 24, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			awaitPane(t, p, term.Done, "ready codex new")
+			path := filepath.Join(task.Worktree, ".maestro", "handoff.md")
+			if err = os.MkdirAll(path, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = r.Switch(ctx, task, "agy", 80, 24, true); err == nil {
+				t.Fatal("expected handoff write failure")
+			}
+			pending, err := s.Store.PendingHandoff(ctx, task.ID)
+			if err != nil || pending.ID == 0 || pending.FromSession == 0 {
+				t.Fatal("failed switch did not retain its source context", pending, err)
+			}
+			notes := "Updated requirement: preserve API compatibility."
+			if err = r.SetNotes(ctx, task, notes); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(filepath.Join(task.Worktree, "retry-context.txt"), []byte("new work after the failed switch"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			if mode == "switch" {
+				p, err = r.Switch(ctx, task, "agy", 80, 24, true)
+			} else {
+				p, err = r.Start(task, 80, 24, mode == "fresh")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			awaitPane(t, p, term.Done, "ready agy new")
+			content, err := os.ReadFile(path)
+			if err != nil || !strings.Contains(string(content), notes) || !strings.Contains(string(content), "retry-context.txt") {
+				t.Fatal("retry handoff omitted current notes or Git state", string(content), err)
+			}
+			saved, err := s.Store.PendingHandoff(ctx, task.ID)
+			if err != nil || saved.ID != pending.ID || saved.FromSession != pending.FromSession || saved.Content != string(content) {
+				t.Fatal("retry did not refresh the existing handoff", saved, err)
+			}
+		})
+	}
+}
+
+func TestSwitchSessionCreationFailureRetainsHandoff(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	ctx := context.Background()
+	p, err := r.Start(task, 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready codex new")
+	original := s.Config.Agents["agy"]
+	broken := original
+	broken.GenerateSessionID = false
+	broken.SessionCreate = []string{"-test.run=^TestContextAgentProcess$", "--", "agy", "new", "failed-session"}
+	s.Config.Agents["agy"] = broken
+	t.Setenv("MAESTRO_FAIL_STARTUP_AGENT", "agy")
+	if _, err = r.Switch(ctx, task, "agy", 80, 24, true); err == nil {
+		t.Fatal("expected session creation failure")
+	}
+	pending, err := s.Store.PendingHandoff(ctx, task.ID)
+	if err != nil || pending.ID == 0 || pending.Agent != "agy" {
+		t.Fatal("session creation failure lost pending context", pending, err)
+	}
+	current, err := s.Find(ctx, task.Slug)
+	if err != nil || current.Agent != "agy" {
+		t.Fatal("session creation failure lost selected target", current, err)
+	}
+	s.Config.Agents["agy"] = original
+	t.Setenv("MAESTRO_FAIL_STARTUP_AGENT", "")
+	p, err = r.Start(task, 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready agy new")
+	if !strings.Contains(strings.Join(p.Scrollback(), "\n"), "Read .maestro/handoff.md first.") {
+		t.Fatal("session creation retry lost handoff instruction")
 	}
 }
 

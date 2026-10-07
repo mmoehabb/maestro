@@ -29,11 +29,13 @@ func (s *TaskService) mutateTask(ctx context.Context, slug string, mutate func(s
 }
 
 func (s *TaskService) Archive(ctx context.Context, slug string) error {
-	return s.mutateTask(ctx, slug, func(t store.Task) error { return s.Store.SetArchived(ctx, t.ID, true) })
+	_, err := s.Workflow(ctx, slug, "archive", WorkflowOptions{})
+	return err
 }
 
 func (s *TaskService) Reopen(ctx context.Context, slug string) error {
-	return s.mutateTask(ctx, slug, func(t store.Task) error { return s.Store.SetArchived(ctx, t.ID, false) })
+	_, err := s.Workflow(ctx, slug, "reopen", WorkflowOptions{})
+	return err
 }
 
 func (s *TaskService) DeleteArchived(ctx context.Context, slug string) error {
@@ -42,29 +44,6 @@ func (s *TaskService) DeleteArchived(ctx context.Context, slug string) error {
 
 // Archive waits for final history persistence before hiding the task.
 func (r *Runtime) Archive(ctx context.Context, task store.Task) error {
-	done, err := r.operation(task.ID)
-	if err != nil {
-		return err
-	}
-	defer done()
-	task, err = r.Service.Find(ctx, task.Slug)
-	if err != nil {
-		return err
-	}
-	if old := r.entry(task.ID); old != nil {
-		old.pane.Stop()
-		<-old.finished
-		if old.saveErr != nil {
-			if err = r.retryHistory(old); err != nil {
-				return err
-			}
-		}
-	}
-	if err = r.Service.Store.SetArchived(ctx, task.ID, true); err != nil {
-		return err
-	}
-	r.mu.Lock()
-	delete(r.panes, task.ID)
-	r.mu.Unlock()
-	return nil
+	_, err := r.Workflow(ctx, task, "archive", WorkflowOptions{StopAgent: true})
+	return err
 }

@@ -48,6 +48,9 @@ type Config struct {
 		MergeMethod string `toml:"merge_method"`
 		Cleanup     string `toml:"cleanup"`
 	} `toml:"git"`
+	GitHub struct {
+		Token string `toml:"token"`
+	} `toml:"github"`
 	Handoff struct {
 		TokenBudget int `toml:"token_budget"`
 	} `toml:"handoff"`

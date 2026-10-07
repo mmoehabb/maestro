@@ -1,10 +1,7 @@
 // Package cli defines Maestro's command-line interface.
-//
-// Commands not yet delivered return ErrNotImplemented naming their phase.
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,15 +11,6 @@ import (
 	"github.com/mmoehabb/maestro/internal/app"
 	"github.com/mmoehabb/maestro/internal/version"
 )
-
-// ErrNotImplemented is returned by commands scheduled for a later phase.
-var ErrNotImplemented = errors.New("not implemented yet")
-
-func notImplemented() func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, _ []string) error {
-		return fmt.Errorf("%q: %w (planned for %s, see docs/PLAN.md)", cmd.CommandPath(), ErrNotImplemented, "P3")
-	}
-}
 
 // NewRootCmd builds the full command tree. Exposed for tests.
 func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
@@ -51,9 +39,9 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		newSwitchCmd(),
 		newHistoryCmd(),
 		newNotesCmd(),
-		&cobra.Command{Use: "push <task>", Short: "Push a task's branch", Args: cobra.ExactArgs(1), RunE: notImplemented()},
-		&cobra.Command{Use: "pr <task>", Short: "Create or open a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented()},
-		&cobra.Command{Use: "merge <task>", Short: "Merge a task's PR", Args: cobra.ExactArgs(1), RunE: notImplemented()},
+		newForgeCmd("push"),
+		newForgeCmd("pr"),
+		newForgeCmd("merge"),
 		newLifecycleCmd("archive"),
 		newLifecycleCmd("reopen"),
 		newLifecycleCmd("rm"),

@@ -49,6 +49,25 @@ func TestCreateAndDiscoverWorktree(t *testing.T) {
 	}
 }
 
+func TestPreserveHeadMigratesLegacyRecoveryRef(t *testing.T) {
+	ctx := context.Background()
+	dir := testutil.Repo(t)
+	r, err := Discover(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := strings.TrimSpace(testutil.Git(t, dir, "rev-parse", "HEAD"))
+	testutil.Git(t, dir, "update-ref", "refs/maestro/archive/42", old)
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "next cycle")
+	if _, err = r.PreserveHead(ctx, dir, 42); err != nil {
+		t.Fatal(err)
+	}
+	ref := "refs/maestro/recovery/42/" + old
+	if got := strings.TrimSpace(testutil.Git(t, dir, "rev-parse", ref)); got != old {
+		t.Fatal(got)
+	}
+}
+
 func TestCopyRefusesTraversalSymlinksAndOverwrite(t *testing.T) {
 	src, dst := t.TempDir(), t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "secret"), []byte("source"), 0o600); err != nil {

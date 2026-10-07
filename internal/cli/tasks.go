@@ -20,6 +20,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/app"
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
+	"github.com/mmoehabb/maestro/internal/forge/github"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/term"
 	"github.com/mmoehabb/maestro/internal/tui"
@@ -81,9 +82,9 @@ func newListCmd() *cobra.Command {
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "TASK\tSTATE\tAGENT\tBRANCH")
+			fmt.Fprintln(w, "TASK\tSTATE\tAGENT\tBRANCH\tPR\tCI\tREVIEW")
 			for _, t := range tasks {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", t.Slug, t.Lifecycle, t.Agent, t.Branch)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", t.Slug, t.Lifecycle, t.Agent, t.Branch, t.PRURL, t.CIState, t.ReviewState)
 			}
 			return w.Flush()
 		},
@@ -107,6 +108,9 @@ func newConfigCmd() *cobra.Command {
 			cfg, err := effectiveConfig(cmd)
 			if err != nil {
 				return err
+			}
+			if cfg.GitHub.Token != "" {
+				cfg.GitHub.Token = "[redacted]"
 			}
 			return toml.NewEncoder(cmd.OutOrStdout()).Encode(cfg)
 		},
@@ -159,6 +163,17 @@ func newDoctorCmd() *cobra.Command {
 				} else {
 					fmt.Fprintf(w, "%s: %s %s\n", name, path, commandVersion(cmd.Context(), path))
 				}
+			}
+			authCtx, stopAuth := context.WithTimeout(cmd.Context(), 10*time.Second)
+			_, source, authErr := github.Token(authCtx, cfg.GitHub.Token)
+			if authErr == nil {
+				authErr = github.New(cfg.GitHub.Token).CheckAuth(authCtx)
+			}
+			stopAuth()
+			if authErr != nil {
+				fmt.Fprintf(w, "GitHub: %v\n", authErr)
+			} else {
+				fmt.Fprintf(w, "GitHub: authenticated (%s)\n", source)
 			}
 			fmt.Fprintf(w, "config: %s\nworktrees: %s\n", config.DefaultPaths().ConfigFile, cfg.Worktree.Root)
 			fmt.Fprintf(w, "keyboard disambiguation: %s\nactive prefix: %s (preferred: %s)\n", probeStatus, term.ActivePrefix(cfg.Prefix, cfg.PrefixFallback, enhanced), cfg.Prefix)

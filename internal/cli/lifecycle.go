@@ -7,9 +7,11 @@ import (
 
 	"github.com/mmoehabb/maestro/internal/app"
 	"github.com/mmoehabb/maestro/internal/config"
+	"github.com/mmoehabb/maestro/internal/core"
 )
 
 func newLifecycleCmd(action string) *cobra.Command {
+	var cleanup, force bool
 	descriptions := map[string]string{
 		"archive": "Hide a task tab, preserving its worktree and history",
 		"reopen":  "Restore an archived task tab",
@@ -25,7 +27,14 @@ func newLifecycleCmd(action string) *cobra.Command {
 			defer s.Store.Close()
 			switch action {
 			case "archive":
-				err = s.Archive(cmd.Context(), args[0])
+				if force && !cleanup {
+					return fmt.Errorf("--force requires --cleanup")
+				}
+				if cleanup {
+					_, err = s.Workflow(cmd.Context(), args[0], "cleanup", core.WorkflowOptions{Force: force})
+				} else {
+					err = s.Archive(cmd.Context(), args[0])
+				}
 			case "reopen":
 				err = s.Reopen(cmd.Context(), args[0])
 			case "rm":
@@ -34,9 +43,13 @@ func newLifecycleCmd(action string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s complete (worktree and branch retained)\n", args[0], action)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s complete\n", args[0], action)
 			return nil
 		},
+	}
+	if action == "archive" {
+		cmd.Flags().BoolVar(&cleanup, "cleanup", false, "Remove the worktree and branch after safety checks; retain history")
+		cmd.Flags().BoolVar(&force, "force", false, "Explicitly discard uncommitted files and allow cleanup without proof of push (requires --cleanup)")
 	}
 	if action == "rm" {
 		cmd.Aliases = []string{"delete"}

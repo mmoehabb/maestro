@@ -3,7 +3,7 @@
 > **tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code and Cursor Agent side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
 
 > [!NOTE]
-> P1 and P2 are implemented: isolated worktrees, embedded agent terminals, session resume, native conversation history and context handoff. Forge operations arrive in P3. See [docs/PLAN.md](docs/PLAN.md).
+> P1, P2, and P3 are implemented: isolated worktrees, embedded agent terminals, session resume, native conversation history and context handoff, plus GitHub PR workflows and safe cleanup. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Install (from source)
 
@@ -58,7 +58,9 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix H` | Copy the handoff instruction for manual-prompt agents |
 | `prefix n` | Edit task notes (Ctrl+S saves, Esc cancels) |
 | `prefix c` | New task: title, base branch, agent and prompt |
-| `prefix d` | Archive the current tab and stop its agent |
+| `prefix d` | Hide the current tab and stop its agent |
+| `prefix p`, `prefix P`, `prefix m` | Push, create/open PR, merge PR |
+| `prefix &`, `prefix u` | Archive/clean up, reopen an archived task |
 | `prefix x`, `prefix r` | Stop, restart/resume the agent |
 | `prefix R` | Explicitly start a fresh session |
 | `prefix t` | Open shell in task worktree |
@@ -76,6 +78,17 @@ Click tabs to switch. Mouse input within the terminal is forwarded; the wheel en
 Inside the TUI, `prefix d` stops the current agent, saves its final history, and
 archives the tab. Worktrees, branches, session identity, and saved history are
 preserved. `maestro reopen <task>` makes the tab available on the next launch.
+
+Reopening a task with a retained PR restores its PR lifecycle so polling can
+detect changes made while it was archived. After cleanup of a completed task,
+reopening creates a fresh branch for the next cycle. This allows normal pushes
+after a squash merge even when GitHub retains the previous source branch.
+
+Recreated worktrees receive the configured `worktree.copy` files and
+`worktree.setup` commands before the task becomes active. Failed provisioning
+keeps the task archived; retrying reopen resumes at the unfinished step.
+Cleanup preserves commit snapshots under `refs/maestro/recovery/<task-id>/<commit>`
+across successive task cycles, including local commits saved during force cleanup.
 
 `maestro tabs` (also `ls` or `list`) lists unarchived tasks. Use `--all` to include
 archived tasks, `--archived` to show only archived tasks, and `--json` for scripts.
@@ -130,7 +143,7 @@ Configuration layers are built-in defaults, the global config file, then the mai
 
 Data lives in the platform's XDG data directory under `maestro`: `maestro.db`, `locks/`, and `worktrees/<repository-key>/<task-slug>/`. The repository key hashes the Git common directory, keeping checkouts with identical names separate. Commands run from a linked worktree resolve to the same project as the main checkout. The TUI holds the project lock for its lifetime; CLI listing and history remain available. A second TUI or external task-creation command reports that the project is busy.
 
-`worktree.copy` copies regular files only, skips missing files, and rejects symlinks, traversal, Git metadata and existing destinations. Copied files have owner-only permissions. `worktree.setup` runs trusted shell commands from your config in each new worktree (`sh` on Unix, `cmd` on Windows). Review repository config before using it. If copying, setup or database persistence fails after worktree creation, Maestro retains the checkout and reports its path and branch. Inspect and recover it manually before retrying; failed provisioning is not listed as a saved task. No automatic cleanup is implemented yet.
+`worktree.copy` copies regular files only, skips missing files, and rejects symlinks, traversal, Git metadata and existing destinations. Copied files have owner-only permissions. `worktree.setup` runs trusted shell commands from your config in each new worktree (`sh` on Unix, `cmd` on Windows). Review repository config before using it. If initial copying, setup or database persistence fails after worktree creation, Maestro retains the checkout and reports its path and branch. Inspect and recover it manually before retrying creation; failed initial provisioning is not listed as a saved task. Reopen provisioning retains the archived task and saves progress for retry.
 
 ### Context handoff and history
 
@@ -176,7 +189,7 @@ handoff. Merely creating a process no longer consumes pending context.
 If the selected target has no discoverable resume identity, the switch dialog
 asks before stopping the current agent and starting the target fresh with a
 handoff. This also applies to `maestro switch`. Use `prefix R` to start the
-current agent fresh. Worktree/branch cleanup remains P3.
+current agent fresh. Use `prefix &` for worktree and branch cleanup.
 
 `prefix h` opens history: Tab selects a session, Enter expands it, `t` reveals tool
 details, arrows/j/k and page keys scroll, `r` refreshes, and Escape returns to the
@@ -208,7 +221,7 @@ formats are not stable public APIs.
 
 The test suite includes real PTY processes, three-task restoration, a controlled Codex → agy → Codex handoff, pending-switch recovery, P1 database migration, duplicate-free transcript imports, native activity precedence, retained history after worktree deletion, and UI snapshots at 80×24 and 160×48. Regenerate snapshots with `go test ./internal/tui -update` and review the diff. A fake agent is available with `go build -o /tmp/maestro-fakeagent ./internal/testutil/fakeagent`; configure `new = ["new", "{{.SessionID}}"]`, `resume = ["resume", "{{.SessionID}}"]` and `generate_session_id = true` to try it without API credentials.
 
-Linux terminal smoke tests and Windows/macOS cross-builds have been performed. Read-only parser checks also exercise existing local Codex/agy transcripts and OpenCode native history. Native Windows/macOS behavior and authenticated live cross-agent conversations still need manual verification. GitHub auth diagnostics are part of P3.
+Linux terminal smoke tests and Windows/macOS cross-builds have been performed. Read-only parser checks also exercise existing local Codex/agy transcripts and OpenCode native history. Native Windows/macOS behavior and authenticated live cross-agent conversations remain manual checks. GitHub PR, CI, review, merge, cleanup, and reopen behavior is covered by fake-server and integration tests; a real authenticated GitHub run remains a manual acceptance check.
 
 ### Layout
 

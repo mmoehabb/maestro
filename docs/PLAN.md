@@ -437,7 +437,7 @@ maestro completion <shell>
 
 ### Implementation status
 
-P0, P1 and the P2 implementation are delivered. Authenticated live P2 acceptance remains a manual check. P1 includes:
+P0, P1, P2, and the P3 implementation are delivered. Authenticated live GitHub acceptance remains a manual check. P1 includes:
 
 - Layered TOML defaults/global/repo configuration, validation, and per-task CLI overrides.
 - SQLite migration with WAL and foreign keys; project/task/session persistence, atomic creation/start events, exit status and terminal fallback history.
@@ -449,7 +449,7 @@ P0, P1 and the P2 implementation are delivered. Authenticated live P2 acceptance
 - Functional root/open/new/ls/config/config-path/doctor commands; interactive doctor keyboard negotiation and agent-version checks.
 - Tests for the foundation, real PTY processes, keyboard encoding, session identity matching, three-task stop/reopen/resume and UI snapshots at 80×24 and 160×48.
 
-Implementation adjustments: minimal native session **identity** discovery was brought forward from P2 to satisfy P1 resume; full transcript adapters remain P2. `new` provisions tasks for scripts, while root/open and the TUI dialog launch agents. Nerd Font availability cannot reliably be inferred from glyph width, so the default conservatively falls back to Unicode. GitHub auth probes and cleanup/archive/reopen remain P3.
+Implementation adjustments: minimal native session **identity** discovery was brought forward from P2 to satisfy P1 resume; full transcript adapters remain P2. `new` provisions tasks for scripts, while root/open and the TUI dialog launch agents. Nerd Font availability cannot reliably be inferred from glyph width, so the default conservatively falls back to Unicode. GitHub auth probes, PR workflows, polling, merge, cleanup, archive, and reopen are implemented in P3.
 
 The dependency versions already selected in `go.mod` require Go 1.26, superseding the original Go 1.24 stack entry above.
 
@@ -467,7 +467,17 @@ P2 implementation includes:
 - `prefix a` switch/confirmation dialog, `prefix h` expandable history with selected sessions kept visible during navigation, `prefix H` manual-prompt handoff copy, `maestro history [--json]`, and `maestro switch <task> -a <agent>` opening the focused TUI under the existing project lock.
 - Fixture/parser tests; P1 migration and transcript ownership tests; handoff budget/symlink tests; a fake-agent Codex → agy → Codex integration test; failure recovery and concurrent lifecycle tests; history retention after deleting the worktree/source logs and reopening the database; CLI history while locked; and switch/history snapshots at both viewport sizes.
 
-P2 verification separates automated fixture/PTY tests and read-only local parser compatibility checks from authenticated live conversations. The latter, along with native Windows/macOS terminal execution, remain manual checks. Archive/reopen and handoff-file archival remain P3; SQLite already retains the handoff contents.
+P2 verification separates automated fixture/PTY tests and read-only local parser compatibility checks from authenticated live conversations. The latter, along with native Windows/macOS terminal execution, remain manual checks. P3 provides archive/reopen and handoff-file archival; SQLite retains the handoff contents.
+
+P3 implementation includes:
+
+- A GitHub provider behind `forge.Provider`, with HTTPS/SSH remote parsing, token precedence (`GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token`, config), ETag-backed GET caching, pagination, rate-limit backoff, PR creation/lookup, CI/check aggregation, review state, and expected-head squash/merge protection.
+- Push, PR, merge, refresh, and cleanup operations shared by the CLI, TUI, and runtime poller. PR descriptions include the goal, notes, latest handoff, and commit list; lifecycle, CI, and review fields persist with timeline events.
+- A sixty-second poller for open PRs, background cleanup notifications, configurable `ask`/`auto`/`never` cleanup, dirty and unpushed-work refusal, worktree/branch ownership validation, and explicit force cleanup confirmation.
+- Durable cleanup recovery: archive handoffs under the data directory, preserve immutable `refs/maestro/recovery/<task-id>/<commit>` snapshots alongside the latest `refs/maestro/archive/<task-id>` pointer, retain the merge commit for squash merges, resume interrupted cleanup, and recreate archived worktrees from their branch or saved commit. Newly recreated worktrees restore configured copies and setup with persisted progress before activation. SQLite history survives worktree and branch deletion.
+- Explicitly empty PR descriptions remain empty across CLI flags/files and the TUI editor. Persisted lifecycle events wait for consumption when the UI event buffer fills and unblock on runtime shutdown.
+- Regression coverage includes two cleanup cycles followed by Git garbage collection, failed/retried provisioning, a saturated event buffer during automatic cleanup, and the complete TUI push → PR → merge → archive workflow with retained history.
+- TUI controls for push, PR editing, merge confirmation, cleanup/reopen dialogs, lifecycle badges, CI/review indicators, PR browser/copy actions, and viewport snapshots; CLI flags for PR title/body/base, expected merge head, cleanup, and force confirmation.
 
 P1/P2 regression coverage also includes blocked raw-PTY input and bounded shutdown,
 alternate-screen teardown and resized scrollback capture, startup-crash handoff

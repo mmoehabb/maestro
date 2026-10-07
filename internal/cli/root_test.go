@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,17 +51,14 @@ func TestHelpListsPlannedCommands(t *testing.T) {
 	}
 }
 
-func TestStubsReturnNotImplemented(t *testing.T) {
-	cases := map[string][]string{
-		"P3": {"merge", "x"},
-	}
-	for phase, args := range cases {
-		_, err := run(t, args...)
-		if !errors.Is(err, ErrNotImplemented) {
-			t.Fatalf("%v: got %v, want ErrNotImplemented", args, err)
-		}
-		if !strings.Contains(err.Error(), phase) {
-			t.Errorf("%v: error %q does not name phase %s", args, err, phase)
+func TestForgeCommandsRequireExistingTask(t *testing.T) {
+	t.Chdir(testutil.Repo(t))
+	oldConfig, oldData := xdg.ConfigHome, xdg.DataHome
+	xdg.ConfigHome, xdg.DataHome = t.TempDir(), t.TempDir()
+	t.Cleanup(func() { xdg.ConfigHome, xdg.DataHome = oldConfig, oldData })
+	for _, action := range []string{"push", "pr", "merge"} {
+		if _, err := run(t, action, "missing"); err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("%s: %v", action, err)
 		}
 	}
 }

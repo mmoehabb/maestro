@@ -11,7 +11,7 @@ notify_on = ["done", "needs_input"]
 
 [worktree]
 root = ""
-branch_prefix = "maestro/"
+branch_prefix = ""
 copy = [".env", ".env.local"]
 setup = []
 

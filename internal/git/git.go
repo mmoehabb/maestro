@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -113,14 +114,42 @@ func (r Repo) CreateWorktree(ctx context.Context, spec WorktreeSpec) error {
 	if _, err := run(ctx, r.Root, "worktree", "add", "-b", spec.Branch, "--", spec.Path, commit); err != nil {
 		return err
 	}
+	return r.ProvisionWorktree(ctx, spec, 0, nil)
+}
+
+// ProvisionWorktree resumes copies/setup at start. advance persists the next
+// step after each success. Failed setup retains the worktree for inspection.
+func (r Repo) ProvisionWorktree(ctx context.Context, spec WorktreeSpec, start int, advance func(int) error) error {
+	if err := r.ValidateWorktree(ctx, spec.Path, spec.Branch); err != nil {
+		return err
+	}
+	if err := r.excludeHandoff(); err != nil {
+		return err
+	}
 	// Once creation succeeds, failures intentionally retain the checkout. Setup
 	// commands may have made valuable changes, so rollback must never delete it.
-	for _, name := range spec.Copy {
+	for i, name := range spec.Copy {
+		if i < start {
+			continue
+		}
 		if err := copyFile(r.Root, spec.Path, name); err != nil {
-			return fmt.Errorf("copy %q: %w; worktree retained at %s (branch %s)", name, err, spec.Path, spec.Branch)
+			// A crash can leave the copy complete before advance was saved. Only
+			// accept that exact copy; differing files and symlinks remain errors.
+			if advance == nil || !os.IsExist(err) || !sameCopy(r.Root, spec.Path, name) {
+				return fmt.Errorf("copy %q: %w; worktree retained at %s (branch %s)", name, err, spec.Path, spec.Branch)
+			}
+		}
+		if advance != nil {
+			if err := advance(i + 1); err != nil {
+				return err
+			}
 		}
 	}
-	for _, command := range spec.Setup {
+	for i, command := range spec.Setup {
+		step := len(spec.Copy) + i
+		if step < start {
+			continue
+		}
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
 			cmd = exec.CommandContext(ctx, "cmd", "/C", command)
@@ -132,8 +161,30 @@ func (r Repo) CreateWorktree(ctx context.Context, spec WorktreeSpec) error {
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("setup %q: %w; worktree retained at %s (branch %s)", command, err, spec.Path, spec.Branch)
 		}
+		if advance != nil {
+			if err := advance(step + 1); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+func sameCopy(srcRoot, dstRoot, name string) bool {
+	src, err := regularPath(srcRoot, filepath.Clean(name))
+	if err != nil {
+		return false
+	}
+	dst, err := regularPath(dstRoot, filepath.Clean(name))
+	if err != nil {
+		return false
+	}
+	a, err := os.ReadFile(src)
+	if err != nil {
+		return false
+	}
+	b, err := os.ReadFile(dst)
+	return err == nil && bytes.Equal(a, b)
 }
 
 func (r Repo) excludeHandoff() error {

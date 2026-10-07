@@ -152,21 +152,32 @@ func (s *Store) EnsureProject(ctx context.Context, p Project) (Project, error) {
 }
 
 type Task struct {
-	ID         int64  `json:"id"`
-	ProjectID  int64  `json:"project_id"`
-	Slug       string `json:"slug"`
-	Title      string `json:"title"`
-	Goal       string `json:"goal"`
-	Notes      string `json:"notes"`
-	Branch     string `json:"branch"`
-	BaseBranch string `json:"base_branch"`
-	Worktree   string `json:"worktree"`
-	Lifecycle  string `json:"lifecycle"`
-	TabOrder   int    `json:"tab_order"`
-	Agent      string `json:"agent"`
-	Prompt     string `json:"prompt"`
-	CreatedAt  int64  `json:"created_at"`
-	UpdatedAt  int64  `json:"updated_at"`
+	PRNumber       int    `json:"pr_number"`
+	PRURL          string `json:"pr_url"`
+	PRState        string `json:"pr_state"`
+	CIState        string `json:"ci_state"`
+	ReviewState    string `json:"review_state"`
+	PRHeadSHA      string `json:"pr_head_sha"`
+	MergeSHA       string `json:"merge_sha"`
+	ReopenSHA      string `json:"reopen_sha"`
+	ReopenStep     int    `json:"reopen_step"`
+	PRBase         string `json:"pr_base"`
+	CleanupPending bool   `json:"cleanup_pending"`
+	ID             int64  `json:"id"`
+	ProjectID      int64  `json:"project_id"`
+	Slug           string `json:"slug"`
+	Title          string `json:"title"`
+	Goal           string `json:"goal"`
+	Notes          string `json:"notes"`
+	Branch         string `json:"branch"`
+	BaseBranch     string `json:"base_branch"`
+	Worktree       string `json:"worktree"`
+	Lifecycle      string `json:"lifecycle"`
+	TabOrder       int    `json:"tab_order"`
+	Agent          string `json:"agent"`
+	Prompt         string `json:"prompt"`
+	CreatedAt      int64  `json:"created_at"`
+	UpdatedAt      int64  `json:"updated_at"`
 }
 
 // CreateTask persists the task and its first timeline event atomically.
@@ -195,7 +206,8 @@ func (s *Store) CreateTask(ctx context.Context, t Task) (Task, error) {
 
 func (s *Store) Tasks(ctx context.Context, projectID int64, all bool) ([]Task, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, project_id, slug, title, goal, notes,
-		branch, base_branch, worktree, lifecycle, tab_order, agent, prompt, created_at, updated_at
+		branch, base_branch, worktree, lifecycle, tab_order, agent, prompt, created_at, updated_at,
+        COALESCE(pr_number,0),COALESCE(pr_url,''),COALESCE(pr_state,''),COALESCE(ci_state,''),COALESCE(review_state,''),pr_head_sha,merge_sha,reopen_sha,pr_base,cleanup_pending,reopen_step
 		FROM tasks WHERE project_id=? AND (? OR lifecycle != 'archived') ORDER BY tab_order, id`, projectID, all)
 	if err != nil {
 		return nil, err
@@ -205,7 +217,7 @@ func (s *Store) Tasks(ctx context.Context, projectID int64, all bool) ([]Task, e
 	for rows.Next() {
 		var t Task
 		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Slug, &t.Title, &t.Goal, &t.Notes, &t.Branch,
-			&t.BaseBranch, &t.Worktree, &t.Lifecycle, &t.TabOrder, &t.Agent, &t.Prompt, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			&t.BaseBranch, &t.Worktree, &t.Lifecycle, &t.TabOrder, &t.Agent, &t.Prompt, &t.CreatedAt, &t.UpdatedAt, &t.PRNumber, &t.PRURL, &t.PRState, &t.CIState, &t.ReviewState, &t.PRHeadSHA, &t.MergeSHA, &t.ReopenSHA, &t.PRBase, &t.CleanupPending, &t.ReopenStep); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)

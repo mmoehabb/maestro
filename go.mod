@@ -4,10 +4,14 @@ go 1.26.0
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/google/go-github/v74 v74.0.0
 	github.com/spf13/cobra v1.10.2
 )
 
-require github.com/atotto/clipboard v0.1.4 // indirect
+require (
+	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
+)
 
 require (
 	charm.land/bubbles/v2 v2.2.1

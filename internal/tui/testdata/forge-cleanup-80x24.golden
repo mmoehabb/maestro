@@ -1,0 +1,24 @@
+ ♪ maestro /repo
+ ⠋ [38;2;250;179;135m#42![m[38;2;243;139;168m![m fix-auth · codex  ›
+Archive · fix-auth
+
+Stops the agent and saves its final history.
+
+c  Clean worktree and branch after safety checks
+k  Keep worktree and branch; hide the tab
+f  Force cleanup (requires another confirmation)
+
+
+Esc cancel
+
+
+
+
+
+
+
+
+
+
+ codex · maestro/fix-auth · +0 −0 · 0 files · ↑0 ↓0 · pr_open · #42 · CI failure
+ctrl+b ? help · ctrl+b c new · ctrl+b q quit

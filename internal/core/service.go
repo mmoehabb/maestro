@@ -11,11 +11,14 @@ import (
 
 	"github.com/mmoehabb/maestro/internal/agent"
 	"github.com/mmoehabb/maestro/internal/config"
+	"github.com/mmoehabb/maestro/internal/forge"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/store"
 )
 
 type TaskService struct {
+	Forge    forge.Provider
+	DataDir  string
 	Config   config.Config
 	Repo     git.Repo
 	Project  store.Project

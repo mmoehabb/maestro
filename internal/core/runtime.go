@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/mmoehabb/maestro/internal/agent"
+	"github.com/mmoehabb/maestro/internal/forge"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/handoff"
 	"github.com/mmoehabb/maestro/internal/store"
@@ -18,6 +19,8 @@ import (
 )
 
 type Event struct {
+	Task      *store.Task
+	Cleanup   bool
 	TaskID    int64
 	SessionID int64
 	Pane      *term.Pane
@@ -52,6 +55,9 @@ type Runtime struct {
 	cancel      context.CancelFunc
 	errMu       sync.Mutex
 	writeErrors []error
+	pollEnabled bool
+	pollRepo    forge.Repo
+	pollCleanup string
 }
 
 func (s *TaskService) OpenRuntime() (*Runtime, error) {
@@ -59,7 +65,11 @@ func (s *TaskService) OpenRuntime() (*Runtime, error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Runtime{Service: s, Events: make(chan Event, 128), panes: map[int64]*running{}, locks: map[int64]*sync.Mutex{}, ctx: ctx, cancel: cancel}, nil
+	pollRepo, pollErr := forge.ParseRemote(s.Repo.Remote)
+	r := &Runtime{Service: s, Events: make(chan Event, 128), panes: map[int64]*running{}, locks: map[int64]*sync.Mutex{}, ctx: ctx, cancel: cancel, pollEnabled: pollErr == nil && s.Forge != nil, pollRepo: pollRepo, pollCleanup: s.Config.Git.Cleanup}
+	r.wg.Add(1)
+	go r.poll()
+	return r, nil
 }
 
 func (r *Runtime) operation(id int64) (func(), error) {
@@ -138,7 +148,7 @@ func (r *Runtime) resume(ctx context.Context, task store.Task, a agent.Adapter, 
 // acknowledged its pending handoff. A nil value still refreshes pending retries
 // and supplies saved context when explicitly replacing an existing session.
 func (r *Runtime) start(operation context.Context, task store.Task, cols, rows int, fresh bool, handoffFrom *int64) (*term.Pane, error) {
-	if task.Lifecycle == "archived" {
+	if task.Lifecycle == "archived" || task.CleanupPending {
 		return nil, fmt.Errorf("task %q is archived; use maestro reopen %s first", task.Slug, task.Slug)
 	}
 	if err := operation.Err(); err != nil {
@@ -373,6 +383,15 @@ func (r *Runtime) prepareHandoff(ctx context.Context, task store.Task, from int6
 }
 
 func (r *Runtime) emit(e Event) {
+	// Lifecycle updates describe persisted mutations, including deletion of the
+	// worktree. Wait for the UI to consume them, with bounded runtime shutdown.
+	if e.Task != nil {
+		select {
+		case r.Events <- e:
+		case <-r.ctx.Done():
+		}
+		return
+	}
 	select {
 	case r.Events <- e:
 	default:

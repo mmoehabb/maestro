@@ -7,6 +7,7 @@ import (
 
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
+	"github.com/mmoehabb/maestro/internal/forge/github"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/store"
 )
@@ -33,6 +34,7 @@ func Open(ctx context.Context, dir string, paths config.Paths) (*core.TaskServic
 		return nil, err
 	}
 	return &core.TaskService{
+		Forge: github.New(cfg.GitHub.Token), DataDir: paths.DataDir,
 		Config: cfg, Repo: repo, Project: project, Store: db,
 		LockPath: filepath.Join(paths.DataDir, "locks", repo.Key()+".lock"),
 	}, nil

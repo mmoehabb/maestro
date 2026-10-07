@@ -62,6 +62,8 @@ type (
 )
 
 type Model struct {
+	forgeUI                                                   *forgeDialog
+	cleanupQueue                                              []store.Task
 	initialAgent, manualInstruction                           string
 	switcher                                                  *switchDialog
 	history                                                   *historyView
@@ -117,10 +119,45 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg := msg.(type) {
+	case workflowMsg:
+		return m, m.workflowResult(msg)
+	case prDraftMsg:
+		if m.forgeUI == nil {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.forgeUI.busy = false
+			m.forgeUI.err = msg.err.Error()
+			return m, nil
+		}
+		m.applyTask(msg.task)
+		m.forgeUI = newPRDialog(msg.task, msg.draft, m.width, m.height)
+	case reopenListMsg:
+		if m.forgeUI == nil {
+			return m, nil
+		}
+		m.forgeUI.busy = false
+		if msg.err != nil {
+			m.forgeUI.err = msg.err.Error()
+			return m, nil
+		}
+		for _, task := range msg.tasks {
+			if task.Lifecycle == "archived" {
+				m.forgeUI.archived = append(m.forgeUI.archived, task)
+			}
+		}
+	case browserMsg:
+		if msg.err != nil {
+			m.notify(msg.err.Error())
+		}
 	case notesSavedMsg:
 		m.notesSaved(msg)
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.forgeUI != nil && m.forgeUI.action == "pr" && !m.forgeUI.busy {
+			m.forgeUI.body.SetWidth(max(1, m.width-2))
+			m.forgeUI.body.SetHeight(max(1, m.height-13))
+		}
 		if m.notes != nil {
 			m.notes.input.SetWidth(max(1, m.width-2))
 			m.notes.input.SetHeight(max(1, m.height-9))
@@ -181,7 +218,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.cfg.Agents[t.task.Agent].ManualPrompt {
 						m.manualInstruction = handoff.Prompt(t.task.Worktree)
 					}
-					t.task.Lifecycle = "active"
+					if t.task.Lifecycle == "new" {
+						t.task.Lifecycle = "active"
+					}
 					c, r := m.size()
 					_ = t.pane.Resize(c, r)
 				} else {
@@ -234,6 +273,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notify("Shell: " + msg.err.Error())
 		}
 	case core.Event:
+		if msg.Task != nil {
+			m.applyTask(*msg.Task)
+			if msg.Cleanup {
+				m.queueCleanup(*msg.Task)
+			}
+			m.notify(msg.Task.Slug + ": " + msg.Task.Lifecycle)
+		}
 		if msg.Err != nil {
 			m.notify(msg.Err.Error())
 		}
@@ -260,6 +306,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notify("Git status: " + msg.err.Error())
 		}
 	case tickMsg:
+		if len(m.cleanupQueue) > 0 && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help {
+			task := m.cleanupQueue[0]
+			consume := true
+			for _, t := range m.tabs {
+				if t.task.ID == task.ID {
+					if t.pending {
+						consume = false
+						break
+					}
+					m.forgeUI = &forgeDialog{task: t.task, action: "cleanup"}
+					break
+				}
+			}
+			if consume {
+				m.cleanupQueue = m.cleanupQueue[1:]
+			}
+		}
 		m.frame++
 		for i := range m.tabs {
 			if m.tabs[i].pane != nil {
@@ -296,6 +359,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.swallowed = make(map[rune]bool)
 		}
 		m.swallowed[msg.Code] = true
+		if m.forgeUI != nil {
+			return m, m.forgeKey(msg)
+		}
 		if m.notes != nil {
 			return m, m.notesKey(msg)
 		}
@@ -379,6 +445,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case "z":
 				return m, tea.Suspend
+			case "p":
+				return m, m.openForge("push")
+			case "P":
+				return m, m.openForge("pr")
+			case "m":
+				return m, m.openForge("merge")
+			case "&":
+				return m, m.openForge("cleanup")
+			case "u":
+				return m, m.openForge("reopen")
 			case "d":
 				if len(m.tabs) > 0 && !m.tabs[m.active].pending {
 					t := &m.tabs[m.active]
@@ -427,10 +503,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.swallowed, msg.Code)
 			return m, nil
 		}
-		if !m.prefixed && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+		if !m.prefixed && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Key(uv.Key(msg), true)
 		}
 	case tea.PasteMsg:
+		if m.forgeUI != nil {
+			return m, m.forgeInput(msg)
+		}
 		if m.notes != nil {
 			if m.notes.busy {
 				return m, nil
@@ -449,7 +528,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabs[m.active].pane.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
-		if m.notes != nil || m.dialog != nil || m.switcher != nil || m.history != nil || m.help {
+		if m.forgeUI != nil || m.notes != nil || m.dialog != nil || m.switcher != nil || m.history != nil || m.help {
 			return m, nil
 		}
 		mouse := msg.Mouse()
@@ -483,6 +562,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				pane.Mouse(uv.Mouse(mouse), release, motion)
 			}
 		}
+	}
+	if m.forgeUI != nil {
+		return m, m.forgeInput(msg)
 	}
 	if m.notes != nil && !m.notes.busy {
 		var cmd tea.Cmd
@@ -555,7 +637,7 @@ func (m *Model) View() tea.View {
 	labels := make([]string, len(m.tabs))
 	total := 0
 	for i, t := range m.tabs {
-		labels[i] = fmt.Sprintf(" %s %s · %s ", icon(t.state, m.frame, m.cfg.Icons), t.task.Slug, t.task.Agent)
+		labels[i] = fmt.Sprintf(" %s %s%s · %s ", icon(t.state, m.frame, m.cfg.Icons), lifecycleBadge(t.task, m.cfg.Icons), t.task.Slug, t.task.Agent)
 		total += ansi.StringWidth(labels[i])
 		if i == m.active {
 			for total > cols-4 && start < i {
@@ -592,6 +674,9 @@ func (m *Model) View() tea.View {
 	if len(m.tabs) > 0 {
 		t := m.tabs[m.active]
 		status = fmt.Sprintf(" %s · %s · +%d −%d · %d files · ↑%d ↓%d · %s", t.task.Agent, t.task.Branch, t.status.Added, t.status.Deleted, t.status.Dirty, t.status.Ahead, t.status.Behind, t.task.Lifecycle)
+		if t.task.PRNumber != 0 {
+			status += fmt.Sprintf(" · #%d · CI %s · review %s", t.task.PRNumber, t.task.CIState, t.task.ReviewState)
+		}
 		switch {
 		case t.pane != nil:
 			s := t.pane.Snapshot(true)
@@ -614,7 +699,7 @@ func (m *Model) View() tea.View {
 		}
 	}
 	if m.help {
-		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " e  open default editor\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " n  edit task notes\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  archive tab (stop agent, preserve worktree)\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " t  open shell in task directory\n" + m.prefix + " z  suspend maestro\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
+		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " e  open default editor\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " n  edit task notes\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  hide tab (preserve worktree)\n" + m.prefix + " p  push branch\n" + m.prefix + " P  create/open PR\n" + m.prefix + " m  merge PR\n" + m.prefix + " &  archive/cleanup\n" + m.prefix + " u  reopen archived task\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " t  open shell in task directory\n" + m.prefix + " z  suspend maestro\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
 		cursor = nil
 	}
 	if m.dialog != nil {
@@ -631,6 +716,10 @@ func (m *Model) View() tea.View {
 	}
 	if m.notes != nil {
 		body = m.notes.View()
+		cursor = nil
+	}
+	if m.forgeUI != nil {
+		body = m.forgeUI.View(m.cfg.Git.MergeMethod, rows)
 		cursor = nil
 	}
 	lines := strings.Split(body, "\n")

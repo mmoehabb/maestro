@@ -43,7 +43,7 @@ func (s *Store) StartSession(ctx context.Context, task Task, nativeID string, st
 	if err != nil {
 		return session, err
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE tasks SET lifecycle='active', updated_at=? WHERE id=?", session.StartedAt.UnixMilli(), task.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE tasks SET lifecycle=CASE WHEN lifecycle='new' THEN 'active' ELSE lifecycle END, updated_at=? WHERE id=?", session.StartedAt.UnixMilli(), task.ID); err != nil {
 		return session, err
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO events(task_id, ts, kind, payload) VALUES(?,?,'agent_started','{}')", task.ID, session.StartedAt.UnixMilli()); err != nil {

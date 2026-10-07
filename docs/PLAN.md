@@ -167,7 +167,7 @@ notify_on = ["done", "needs_input"]   # desktop notifications (when the tab is n
 
 [worktree]
 root = ""                   # empty = <xdg data>/maestro/worktrees
-branch_prefix = "maestro/"
+branch_prefix = ""
 copy = [".env", ".env.local"]   # files copied from the main checkout into each new worktree
 setup = []                       # e.g. ["npm ci"], run once after the worktree is created
 

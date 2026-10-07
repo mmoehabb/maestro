@@ -179,7 +179,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if msg.err == nil {
 					// Start may have completed a persisted pending switch from an earlier run.
 					if m.cfg.Agents[t.task.Agent].ManualPrompt {
-						m.manualInstruction = handoff.Instruction
+						m.manualInstruction = handoff.Prompt(t.task.Worktree)
 					}
 					t.task.Lifecycle = "active"
 					c, r := m.size()

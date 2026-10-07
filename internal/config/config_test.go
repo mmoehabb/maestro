@@ -55,7 +55,7 @@ func TestMissingConfigUsesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.DefaultAgent != "codex" || c.Activity.IdleAfter != "2s" {
+	if c.DefaultAgent != "codex" || c.Activity.IdleAfter != "2s" || c.Worktree.BranchPrefix != "" {
 		t.Fatalf("bad defaults: %+v", c)
 	}
 }

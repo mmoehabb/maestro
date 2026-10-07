@@ -337,7 +337,7 @@ func (m *Model) contextMessage(msg tea.Msg) bool {
 		}
 		m.switcher = nil
 		if m.cfg.Agents[msg.task.Agent].ManualPrompt {
-			m.manualInstruction = handoff.Instruction
+			m.manualInstruction = handoff.Prompt(msg.task.Worktree)
 			m.notify("Press prefix H to copy the handoff instruction, then paste it into the agent.")
 		}
 		return true

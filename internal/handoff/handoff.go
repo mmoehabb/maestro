@@ -12,7 +12,10 @@ import (
 	"github.com/mmoehabb/maestro/internal/store"
 )
 
-const Instruction = "Read .maestro/handoff.md first. Continue this task using its goal, notes, conversation and Git state."
+// Prompt returns the instruction for the agent to read the handoff file.
+func Prompt(worktree string) string {
+	return fmt.Sprintf("Read %s first. Continue this task using its goal, notes, conversation and Git state.", filepath.Join(worktree, ".maestro", "handoff.md"))
+}
 
 // Estimate conservatively budgets one token per UTF-8 byte. It is deterministic
 // across agents, and deliberately leaves room for tokenizer differences.

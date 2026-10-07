@@ -26,7 +26,7 @@ func TestTasksSurviveRestartAndShareProjectLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Slug != "fix-auth" || first.Agent != "codex" || first.Prompt != "repair login" {
+	if first.Slug != "fix-auth" || first.Branch != "fix-auth" || first.Agent != "codex" || first.Prompt != "repair login" {
 		t.Fatalf("bad task: %+v", first)
 	}
 	if _, err := s.Create(ctx, core.NewTask{Title: "Fix auth"}); err == nil {

@@ -13,6 +13,30 @@ go install github.com/mmoehabb/maestro/cmd/maestro@latest
 
 ## Development
 
+### Product website
+
+The static landing page lives in [`website/`](website/). It uses plain HTML, CSS,
+and JavaScript with local assets and no build step or package dependencies.
+Preview it from the repository root:
+
+```bash
+python3 -m http.server 8000 --directory website
+```
+
+Open <http://localhost:8000>. The terminal preview contains illustrative sessions;
+its tabs demonstrate the workflow without running real agents.
+
+To publish, set **Settings → Pages → Build and deployment → Source** to
+**GitHub Actions** in the GitHub repository. The
+[`pages.yml`](.github/workflows/pages.yml) workflow deploys only `website/` when
+website files or the workflow change on `main`. You can also run it manually
+from the Actions tab on `main`. It uses the built-in `GITHUB_TOKEN`; no custom
+deployment secret is needed. The expected project URL is
+<https://mmoehabb.github.io/maestro/>. Relative asset paths also support a custom
+domain without code changes.
+
+### Application
+
 Requires Go 1.26+ (see `go.mod`). Optional: [golangci-lint](https://golangci-lint.run) v2.9.0+ built with a compatible Go version, [goreleaser](https://goreleaser.com) v2.
 
 ```bash

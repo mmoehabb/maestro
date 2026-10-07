@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f2e9">
+  <meta name="description" content="Conduct your coding agents with Maestro. Run tasks in isolated Git worktrees, switch agents with context, and take each task from prompt to pull request—all in your terminal.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Maestro — Your agents. In concert.">
+  <meta property="og:description" content="One terminal. Multiple coding agents. A little more harmony. Meet the open-source workspace for agent sessions.">
+  <meta name="twitter:card" content="summary">
+  <title>Maestro — Your agents. In concert.</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./script.js" defer></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header wrap">
+    <a class="wordmark" href="#top" aria-label="Maestro home"><span class="brand-mark" aria-hidden="true">m<span>♪</span></span>maestro<span class="wordmark-period">.</span></a>
+    <nav aria-label="Main navigation">
+      <a href="#why">Why Maestro</a>
+      <a href="#workflow">The workflow</a>
+      <a class="nav-github" href="https://github.com/mmoehabb/maestro">GitHub <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <div class="opening-layout wrap">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="small-note" aria-hidden="true">♪</span> A little orchestration. A lot of possibility.</p>
+          <h1 id="hero-title">Your agents.<br><em>In concert.</em></h1>
+          <p class="hero-description">Big ideas take more than one session. Give your coding agents a shared stage—with separate worktrees, preserved context, and you at the conductor’s stand.</p>
+          <div class="hero-actions">
+            <a class="button" href="#get-started">Take the baton <span aria-hidden="true">↗</span></a>
+            <a class="text-link" href="#demo">See it in action <span aria-hidden="true">↓</span></a>
+          </div>
+          <p class="hero-footnote">Open source. Terminal native. Yours to conduct.</p>
+        </div>
+      </section>
+
+      <section class="ensemble" aria-label="Supported agents">
+        <p>Your favorite agents.<br><strong>All on the same stage.</strong></p>
+        <ul><li>Codex</li><li>Claude Code</li><li>OpenCode</li><li>agy</li><li>Qoder</li><li>Kimi Code</li><li>Cursor Agent</li></ul>
+      </section>
+
+      <section class="demo-section" id="demo" aria-labelledby="demo-title">
+        <div class="section-heading"><div><p class="eyebrow">01 / The stage</p><h2 id="demo-title">More sessions.<br>Less juggling.</h2></div><p>Think tmux for coding agents. Every tab is a task, every task has its own worktree, and everything has its place.</p></div>
+        <figure class="demo-figure">
+          <div class="terminal">
+            <div class="terminal-title"><span><span class="terminal-note" aria-hidden="true">♪</span> maestro <span class="terminal-path">/ your-next-big-idea</span></span><span class="demo-label">INTERACTIVE PREVIEW</span></div>
+            <div class="task-tabs" role="tablist" aria-label="Example agent tasks">
+              <button id="tab-auth" class="task-tab" type="button" role="tab" disabled aria-selected="true" aria-controls="panel-auth" tabindex="0"><span class="status-dot working" aria-hidden="true"></span>fix-auth <span class="tab-agent">codex</span></button>
+              <button id="tab-dashboard" class="task-tab" type="button" role="tab" disabled aria-selected="false" aria-controls="panel-dashboard" tabindex="-1"><span class="status-dot done" aria-hidden="true"></span>add-dashboard <span class="tab-agent">claude</span></button>
+              <button id="tab-refactor" class="task-tab" type="button" role="tab" disabled aria-selected="false" aria-controls="panel-refactor" tabindex="-1"><span class="status-dot waiting" aria-hidden="true"></span>refactor-api <span class="tab-agent">opencode</span></button>
+            </div>
+            <div class="terminal-panel" id="panel-auth" role="tabpanel" aria-labelledby="tab-auth" tabindex="0">
+              <div class="panel-meta"><span>CODEX <span class="muted">/ fix-auth</span></span><span class="runtime working-text">● Working</span></div>
+              <p class="terminal-prompt"><span aria-hidden="true">›</span> Fix the login redirect and add a regression test.</p>
+              <p>I found the issue in the session callback. The redirect runs<br class="desktop-break"> before the refreshed session is available.</p>
+              <div class="terminal-output"><p><span class="output-check" aria-hidden="true">✓</span> Read src/auth/callback.ts</p><p><span class="output-check" aria-hidden="true">✓</span> Updated the session refresh flow</p><p><span class="output-arrow" aria-hidden="true">→</span> Running the authentication tests<span class="cursor" aria-hidden="true"></span></p></div>
+              <div class="terminal-status"><span>maestro/fix-auth</span><span><b>+24</b> <i>−8</i> · 2 files</span></div>
+            </div>
+            <div class="terminal-panel" id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" tabindex="0" hidden>
+              <div class="panel-meta"><span>CLAUDE <span class="muted">/ add-dashboard</span></span><span class="runtime done-text">✓ Done</span></div>
+              <p class="terminal-prompt"><span aria-hidden="true">›</span> Build the project activity dashboard.</p>
+              <p>The dashboard is ready for your review. It includes an activity<br class="desktop-break"> feed, project filters, and an empty state for new projects.</p>
+              <div class="terminal-output"><p><span class="output-check" aria-hidden="true">✓</span> Added the dashboard view and filters</p><p><span class="output-check" aria-hidden="true">✓</span> Component tests passed</p><p><span class="output-check" aria-hidden="true">✓</span> Ready for your next instruction</p></div>
+              <div class="terminal-status"><span>maestro/add-dashboard</span><span><b>+186</b> <i>−12</i> · 5 files</span></div>
+            </div>
+            <div class="terminal-panel" id="panel-refactor" role="tabpanel" aria-labelledby="tab-refactor" tabindex="0" hidden>
+              <div class="panel-meta"><span>OPENCODE <span class="muted">/ refactor-api</span></span><span class="runtime waiting-text">◇ Needs input</span></div>
+              <p class="terminal-prompt"><span aria-hidden="true">›</span> Simplify the API error handling.</p>
+              <p>I can consolidate the repeated error handlers into one helper.<br class="desktop-break"> One endpoint still uses the legacy response format.</p>
+              <div class="terminal-output"><p><span class="output-check" aria-hidden="true">✓</span> Reviewed the route handlers</p><p><span class="output-check" aria-hidden="true">✓</span> Prepared the shared error helper</p><p><span class="output-arrow" aria-hidden="true">?</span> Keep the legacy format for compatibility?</p></div>
+              <div class="terminal-status"><span>maestro/refactor-api</span><span><b>+42</b> <i>−97</i> · 8 files</span></div>
+            </div>
+            <div class="terminal-help"><span><kbd>alt 1–9</kbd> switch tabs</span><span><kbd>prefix a</kbd> switch agent</span><span><kbd>prefix ?</kbd> help</span></div>
+          </div>
+          <figcaption><span><span aria-hidden="true">↳</span> Try the tabs. Everyone has their own part to play.</span><span>Illustrative sessions, real capabilities.</span></figcaption>
+        </figure>
+        <noscript><p class="prefix-note">This preview shows an example Codex session. Enable JavaScript to explore the other task tabs.</p></noscript>
+      </section>
+
+      <div class="score-art" aria-hidden="true">
+        <div class="score-top"><span>THE MAESTRO ENSEMBLE</span><span>Op. 01</span></div>
+        <svg width="520" height="420" focusable="false" viewBox="0 0 520 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="currentColor" stroke-width="1" opacity=".23">
+            <path d="M0 150H520M0 172H520M0 194H520M0 216H520M0 238H520"/>
+            <path d="M0 300H520M0 322H520M0 344H520M0 366H520M0 388H520"/>
+          </g>
+          <g class="score-note note-one" fill="currentColor">
+            <ellipse cx="100" cy="215" rx="23" ry="16" transform="rotate(-25 100 215)"/>
+            <path d="M117 211V95h5v116zM117 95l74-17v17l-74 17zM186 84h5v103h-5z"/>
+            <ellipse cx="169" cy="190" rx="23" ry="16" transform="rotate(-25 169 190)"/>
+          </g>
+          <g class="score-note note-two" fill="var(--accent)">
+            <ellipse cx="295" cy="173" rx="27" ry="19" transform="rotate(-25 295 173)"/>
+            <path d="M315 169V31h6v138zM321 31c-1 31 59 41 31 90 8-40-31-38-31-60z"/>
+          </g>
+          <g class="score-note note-three" fill="currentColor">
+            <ellipse cx="428" cy="340" rx="24" ry="17" transform="rotate(-25 428 340)"/>
+            <path d="M447 335V218h5v117z"/>
+          </g>
+          <path d="M76 276c100 48 236 1 334-81" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 7"/>
+          <path d="m396 194 16-3-4 16" stroke="var(--accent)" stroke-width="2"/>
+          <g fill="currentColor" font-family="monospace" font-size="12" letter-spacing="2">
+            <text x="58" y="260">CODEX</text><text x="260" y="222">CLAUDE</text><text x="369" y="402">OPENCODE</text>
+          </g>
+        </svg>
+        <div class="score-bottom"><span>Independent parts.</span><em>One shared direction.</em></div>
+      </div>
+    </div>
+
+    <section class="why-section" id="why" aria-labelledby="why-title">
+      <div class="wrap why-layout">
+        <div class="why-intro"><p class="eyebrow">02 / The arrangement</p><h2 id="why-title">Stay in flow.<br><em>Keep the context.</em></h2><p>For developers running parallel tasks, trying different agents, or returning to work that deserves more than a fresh chat.</p><span class="large-clef" aria-hidden="true">♪</span></div>
+        <div class="features">
+          <article><span class="feature-number">01</span><div><h3>A worktree for every idea.</h3><p>Run a fix, a feature, and a refactor side by side. Each task gets its own Git worktree and branch, so agents can work without stepping on each other’s changes.</p></div></article>
+          <article><span class="feature-number">02</span><div><h3>Change agents. Keep the thread.</h3><p>Hand a task to another agent with its goal, notes, recent conversation, and Git state. Return to a previous agent and resume its own saved session.</p></div></article>
+          <article><span class="feature-number">03</span><div><h3>Pick up where you left off.</h3><p>Quit, come back, and restore your task tabs. Session identities and history stay saved, with native conversation import for Codex, agy, and OpenCode.</p></div></article>
+          <article><span class="feature-number">04</span><div><h3>From first prompt to pull request.</h3><p>Push your branch, create a GitHub PR, follow CI and reviews, then merge and clean up—all from the same workspace.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="workflow-section wrap" id="workflow" aria-labelledby="workflow-title">
+      <div class="section-heading"><div><p class="eyebrow">03 / Find your rhythm</p><h2 id="workflow-title">You set the tempo.</h2></div><p>A familiar terminal workflow,<br>with room for the whole ensemble.</p></div>
+      <ol class="workflow-steps">
+        <li><span class="step-marker">1</span><h3>Give an idea its own space.</h3><p>Name your task, choose an agent, and give it a prompt. Maestro prepares an isolated worktree.</p><code>maestro new "Fix login" -a codex</code></li>
+        <li><span class="step-marker">2</span><h3>Conduct the work.</h3><p>Move between tasks, check progress, or hand off to a different agent when you want a fresh approach.</p><span class="shortcut"><kbd>prefix</kbd> + <kbd>a</kbd><span>switch agent</span></span></li>
+        <li><span class="step-marker">3</span><h3>Bring it home.</h3><p>Review the changes, open a pull request, and merge. Archive the task with its history preserved.</p><span class="shortcut"><kbd>prefix</kbd> + <kbd>P</kbd><span>create / open PR</span></span></li>
+      </ol>
+      <p class="prefix-note">Your prefix is <kbd>ctrl+m</kbd> in terminals with keyboard disambiguation, or <kbd>ctrl+b</kbd> otherwise. <kbd>prefix ?</kbd> shows all shortcuts.</p>
+    </section>
+
+    <section class="get-started-section wrap" id="get-started" aria-labelledby="get-started-title">
+      <div class="install-intro"><p class="eyebrow">04 / Your opening act</p><h2 id="get-started-title">Ready when<br><em>you are.</em></h2><p>Bring your terminal, a Git repository, and your favorite coding agent. Maestro takes care of the arrangement.</p><a class="text-link" href="https://github.com/mmoehabb/maestro#readme">Read the full documentation <span aria-hidden="true">↗</span></a></div>
+      <div class="install-guide">
+        <div class="install-step"><div class="install-heading"><span>01</span><h3>Install Maestro</h3></div><p>From source with <strong>Go 1.26+</strong>. Make sure your Go binary directory (usually <code>~/go/bin</code>) is on your <code>PATH</code>.</p><div class="code-block"><pre><code id="install-command">go install github.com/mmoehabb/maestro/cmd/maestro@latest</code></pre><button class="copy-button" type="button" data-copy="install-command" aria-label="Copy install command" hidden>Copy</button></div></div>
+        <div class="install-step"><div class="install-heading"><span>02</span><h3>Set the stage</h3></div><p>Install and authenticate at least one supported agent CLI separately. In a Git checkout with at least one commit, check your setup:</p><div class="code-block"><pre><code id="doctor-command">maestro doctor</code></pre><button class="copy-button" type="button" data-copy="doctor-command" aria-label="Copy setup check command" hidden>Copy</button></div></div>
+        <div class="install-step"><div class="install-heading"><span>03</span><h3>Start your first session</h3></div><p>Create a task, then open Maestro to launch the agent. Use an agent you have installed; this example uses Codex.</p><div class="code-block"><pre><code id="start-command">maestro new "Fix login" -a codex -p "Repair the login flow"
+maestro</code></pre><button class="copy-button" type="button" data-copy="start-command" aria-label="Copy first session commands" hidden>Copy</button></div></div>
+        <p class="install-note">Using GitHub PR features? Authenticate with <code>gh auth login</code> or set <code>GH_TOKEN</code>. Using Kimi Code? Enter your prompt inside the agent pane instead of using <code>-p</code>.</p>
+        <p id="copy-status" class="copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
+      </div>
+    </section>
+    <section class="closing wrap" aria-label="Contribute to Maestro"><p>Great work has a rhythm.</p><div><h2>Make it <em>yours.</em></h2><a class="button" href="https://github.com/mmoehabb/maestro">Find Maestro on GitHub <span aria-hidden="true">↗</span></a></div></section>
+  </main>
+  <footer class="site-footer wrap"><a class="wordmark" href="#top" aria-label="Maestro home">maestro<span class="wordmark-period">.</span></a><p>A little more harmony in your terminal.</p><div><a href="https://github.com/mmoehabb/maestro/blob/main/LICENSE">MIT license</a><a href="https://github.com/mmoehabb/maestro/issues">Feedback <span aria-hidden="true">↗</span></a></div></footer>
+</body>
+</html>

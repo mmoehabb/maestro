@@ -288,7 +288,7 @@ type finishScreen struct{}
 
 func TestP4Screens(t *testing.T) {
 	for _, size := range [][2]int{{80, 24}, {160, 48}} {
-		for _, screen := range []string{"main", "empty", "launch-error", "newtask", "switch", "confirm", "history", "notes", "pr", "pr-existing", "merge", "cleanup", "force", "reopen", "help", "help-end", "palette", "palette-empty", "palette-disabled", "diff", "diff-empty", "diff-loading", "diff-error", "sidebar", "sidebar-overflow", "toast", "icons-unicode", "icons-ascii", "icons-nerd", "light", "tokyo-night", "themes"} {
+		for _, screen := range []string{"main", "empty", "launch-error", "newtask", "switch", "confirm", "confirm-fresh", "switch-overflow", "switch-sidebar", "history", "notes", "pr", "pr-existing", "merge", "cleanup", "force", "reopen", "help", "help-end", "palette", "palette-empty", "palette-disabled", "diff", "diff-empty", "diff-loading", "diff-error", "sidebar", "sidebar-overflow", "toast", "icons-unicode", "icons-ascii", "icons-nerd", "light", "tokyo-night", "themes"} {
 			t.Run(fmt.Sprintf("%s-%dx%d", screen, size[0], size[1]), func(t *testing.T) {
 				m := testModel(t)
 				m.width, m.height = size[0], size[1]
@@ -305,8 +305,17 @@ func TestP4Screens(t *testing.T) {
 					for i := range m.dialog.detected {
 						m.dialog.detected[i] = "installed"
 					}
-				case "switch", "confirm":
-					m.switcher = &switchDialog{task: task, agents: []string{"agy", "codex"}, labels: []string{"agy · installed", "codex · current"}, confirm: screen == "confirm"}
+				case "switch", "confirm", "confirm-fresh", "switch-overflow", "switch-sidebar":
+					m.switcher = &switchDialog{task: task, agents: []string{"agy", "codex"}, labels: []string{"agy · installed", "codex · current"}, confirm: strings.HasPrefix(screen, "confirm"), fresh: screen == "confirm-fresh"}
+					if screen == "switch-overflow" || screen == "switch-sidebar" {
+						for i := range 20 {
+							name := fmt.Sprintf("custom-agent-%02d", i)
+							m.switcher.agents = append(m.switcher.agents, name)
+							m.switcher.labels = append(m.switcher.labels, name+" · previously used")
+						}
+						m.switcher.selected = len(m.switcher.agents) - 1
+						m.sidebar = screen == "switch-sidebar"
+					}
 				case "history":
 					m.history = &historyView{data: fixtureHistory(), expanded: map[int64]bool{1: true}}
 				case "notes":

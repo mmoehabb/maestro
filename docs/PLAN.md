@@ -373,7 +373,7 @@ type Provider interface {
 | runtime | Starting / no activity yet | `` | `○` | dim |
 | runtime | Working (thinking or applying changes) | spinner `⠋⠙⠹…` | `⠋⠙⠹…` / `-\|/` | accent |
 | runtime | **Done** (agent idle, turn finished) | `` | `✓` | green |
-| runtime | Needs your input (tab pulses, desktop notification) | `` | `⚑` | yellow |
+| runtime | Needs your input (temporary attention highlight, desktop notification) | `` | `⚑` | yellow |
 | runtime | Exited / crashed | `` / `` | `■` / `⚠` | dim / red |
 | lifecycle | Local changes, not pushed | `` | `●` | neutral |
 | lifecycle | Pushed | `` | `↑` | blue |
@@ -382,18 +382,18 @@ type Provider interface {
 | lifecycle | Merged | `` | `⊕` | purple |
 | lifecycle | Closed | `` | `✕` | red |
 
-Icon mode is `nerd` by default. Maestro falls back to Unicode automatically when `icons = "nerd"` but the terminal reports a non-Nerd font (probe glyph width at startup), or when overridden. ASCII is available for minimal terminals.
+Icon mode is `nerd` by default and conservatively uses Unicode glyphs because glyph width cannot reliably identify installed fonts. ASCII is available for minimal terminals.
 
-The active tab is highlighted with a rounded underline, inactive tabs are dimmed, and the list scrolls with `‹ ›` when there are too many tabs. When a background tab turns **Done** or **NeedsInput**, its icon flashes once and a toast names it.
+The active tab has a highlighted surface and underline, and the list scrolls with `‹ ›` when there are too many tabs. When a background tab turns **Done** or **NeedsInput**, it gets a temporary attention highlight and a footer toast names it. State revisions prevent delayed runtime events from replaying an alert already observed through a pane snapshot.
 
-**Dialogs and views** (centered rounded modals with a dimmed backdrop):
+**Dialogs and views** (replace the agent pane while open; the new-task form uses a centered border when space permits):
 - **New task** (`prefix c`): title → slug, base branch, agent picker showing detected agents, optional first prompt.
-- **Switch agent** (`prefix a`): agent list showing which agents have previously worked on this task.
+- **Switch agent** (`prefix a`): scrollable agent list showing which agents have previously worked on this task; dedicated, wrapped interrupt/fresh-start confirmation with visible confirm/cancel keys.
 - **Command palette** (`prefix :`): fuzzy search over every action and task.
 - **History** (`prefix h`): the task timeline (events + agent sessions); expand any session to read its turns.
 - **Diff** (`prefix D`; `prefix d` hides a tab): syntax-highlighted `git diff` against the base branch.
 - **Help** (`prefix ?`): all keybindings, grouped.
-- **Toasts** in the bottom-right for async events (agent done, PR merged, CI failed, agent exited).
+- **Toasts** in the footer for background Done/NeedsInput transitions, lifecycle changes, action results and errors. CI and agent-exit states are shown in badges; dedicated CI-failure/exit toasts are not part of P4.
 
 **Keymap** (prefix `ctrl+m`, falls back to `ctrl+b`; both configurable):
 
@@ -404,7 +404,7 @@ The active tab is highlighted with a rounded underline, inactive tabs are dimmed
 | `prefix x` | Stop agent | `prefix r` | Restart / resume agent |
 | `prefix p` | Push | `prefix P` | Create / open PR |
 | `prefix m` | Merge PR (squash) | `prefix n` | Edit task notes |
-| `prefix [` | Scroll / copy mode | `prefix ,` | Rename task |
+| `prefix [` | Scroll / copy mode | `prefix T` | Preview / save theme |
 | `prefix &` | Archive task | `prefix q` | Quit (agents stop; resumed next launch) |
 | `prefix z` | Suspend app | `prefix s` | Toggle tabs / sidebar layout |
 | `prefix t` | Open shell in task directory | `prefix prefix` | Send the prefix key itself to the agent |
@@ -437,7 +437,7 @@ maestro completion <shell>
 
 ### Implementation status
 
-P0–P4 implementations are delivered. Authenticated live GitHub acceptance and native macOS/Windows P4 terminal and desktop-notification acceptance remain manual checks. P1 includes:
+P0–P4 implementations are delivered, with P4 review corrections tracked in [P4_REVIEW_PLAN.md](P4_REVIEW_PLAN.md). Authenticated live GitHub acceptance and native macOS/Windows P4 terminal and desktop-notification acceptance remain manual checks. P1 includes:
 
 - Layered TOML defaults/global/repo configuration, validation, and per-task CLI overrides.
 - SQLite migration with WAL and foreign keys; project/task/session persistence, atomic creation/start events, exit status and terminal fallback history.
@@ -490,9 +490,9 @@ P4 implementation includes:
 
 - A shared action registry, fuzzy command/task palette (`prefix :`), and scrollable help.
 - An asynchronous, bounded diff view (`prefix D`) comparing the base with the tracked working tree, with diff syntax colors, untracked/binary indicators, refresh, and scrolling. The shipped `prefix d` archive shortcut is preserved.
-- Sidebar layout (`prefix s`) with narrow-terminal fallback, shared pane/cursor/mouse geometry, and drag ordering persisted transactionally using the existing `tab_order` column.
+- Sidebar layout (`prefix s`) with narrow-terminal fallback, shared pane/cursor/mouse geometry, and drag ordering persisted transactionally using the existing `tab_order` column. Reopened tasks receive a committed append position, preserving the visible order on restart.
 - Four built-in themes (Forest, Paper, Catppuccin, Tokyo Night), automatic terminal background detection, validated custom palettes, `maestro theme [name] [--local]`, and a live-preview picker (`prefix T`) with save/cancel. Theme updates preserve config comments and unrelated settings.
-- Best-effort Linux/macOS/Windows desktop notifications respecting `activity.notify_on`, focus, state transitions, and stale-pane filtering, with in-app alerts and attention highlights.
+- Best-effort Linux/macOS/Windows desktop notifications respecting `activity.notify_on`, focus, versioned state transitions, and stale-pane filtering, with in-app alerts and attention highlights.
 - Custom-agent configuration guidance and a [manual UX checklist](P4_UX.md). Native desktop notification delivery and cross-platform terminal UX remain manual acceptance checks.
 - Teatest/v2 screen goldens at both planned sizes, alongside regression coverage for palette input, diff replies, ordering persistence, themes, and notification deduplication. The Linux PTY smoke test covers three agents, palette selection, diff, sidebar, mouse drag, persisted order, resize, prompt forwarding, scrollable help, quit, and resume with unchanged native session IDs.
 
@@ -513,6 +513,10 @@ flowchart LR
 | **P3** | GitHub provider, push / PR / squash-merge, poller, CI and review badges, cleanup flow, archive/reopen | A task goes New → PR → Merged → Archived from inside the TUI, and the icons update |
 | **P4** | Command palette, diff view, sidebar layout, themes, mouse drag, desktop notifications, custom agents docs | UX review pass; teatest golden files for every screen |
 | **P5** | `maestrod` (Unix socket / Windows named pipe) for detach/attach, GitLab provider | Agents keep running after the TUI closes |
+
+P5 UI follow-up: title-only task rename. The earlier proposed `prefix ,` binding
+is not implemented or advertised in P4. Slug, branch, and worktree renaming are
+separate scope; they must not be implied by title editing.
 
 ---
 

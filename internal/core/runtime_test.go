@@ -131,6 +131,19 @@ func testThreeTasksRestoreNativeSessions(t *testing.T, createCommand bool) {
 		t.Fatal("read-only listing blocked", err)
 	}
 	_ = other.Store.Close()
+	// Reopening appends to the dragged visible order without allocating a new
+	// agent identity. Restore that exact order and the same sessions below.
+	if err := r.Archive(ctx, tasks[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ReorderTasks(ctx, []int64{tasks[2].ID, tasks[1].ID}); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := r.Workflow(ctx, tasks[0], "reopen", core.WorkflowOptions{})
+	if err != nil || reopened.TabOrder != 2 {
+		t.Fatal("reopen did not return its committed append position", reopened, err)
+	}
+	wantOrder := []int64{tasks[2].ID, tasks[1].ID, tasks[0].ID}
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +151,15 @@ func testThreeTasksRestoreNativeSessions(t *testing.T, createCommand bool) {
 		t.Fatal(err)
 	}
 	s = open()
+	tasks, err = s.List(ctx, false)
+	if err != nil || len(tasks) != len(wantOrder) {
+		t.Fatal(tasks, err)
+	}
+	for i, task := range tasks {
+		if task.ID != wantOrder[i] {
+			t.Fatal("reopen order changed after restart", tasks)
+		}
+	}
 	r, err = s.OpenRuntime()
 	if err != nil {
 		t.Fatal(err)

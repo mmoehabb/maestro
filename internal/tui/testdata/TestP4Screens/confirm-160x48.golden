@@ -8,12 +8,12 @@
 
    Switch agent · fix-auth
    
-   › agy · installed
-     codex · current
+   The agent is active. Interrupt it and switch?
    
-   ↑/↓ select · Enter switch · Esc cancel
+   Target: agy
    
-   The agent is active. Interrupt it and switch? y / n
+   y/Enter confirm · n/Esc cancel
+   
    
    
    

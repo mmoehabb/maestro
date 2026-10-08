@@ -24,6 +24,8 @@ type switchDialog struct {
 	confirm, busy  bool
 	fresh          bool
 	err            string
+	offset         int
+	scrolled       bool
 }
 type switchedMsg struct {
 	target string
@@ -111,6 +113,17 @@ func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
 	if d.busy {
 		return nil
 	}
+	_, rows := m.size()
+	switch msg.String() {
+	case "pgdown":
+		d.offset += max(1, rows-5)
+		d.scrolled = true
+		return nil
+	case "pgup":
+		d.offset = max(0, d.offset-max(1, rows-5))
+		d.scrolled = true
+		return nil
+	}
 	if d.confirm {
 		switch msg.String() {
 		case "y", "enter":
@@ -119,6 +132,8 @@ func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
 			d.confirm = false
 			d.fresh = false
 			d.err = ""
+			d.offset = 0
+			d.scrolled = false
 		}
 		return nil
 	}
@@ -127,39 +142,62 @@ func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.switcher = nil
 	case "up", "k":
 		d.selected = (d.selected + len(d.agents) - 1) % len(d.agents)
+		d.scrolled = false
 	case "down", "j":
 		d.selected = (d.selected + 1) % len(d.agents)
+		d.scrolled = false
 	case "enter":
 		return m.switchTask(d.task, d.agents[d.selected], false)
 	}
 	return nil
 }
 
-func (d *switchDialog) View() string {
-	var b strings.Builder
-	b.WriteString("Switch agent · " + d.task.Slug + "\n\n")
-	for i, label := range d.labels {
-		mark := "  "
-		if i == d.selected {
-			mark = "› "
-		}
-		b.WriteString(mark + label + "\n")
-	}
-	b.WriteString("\n↑/↓ select · Enter switch · Esc cancel")
+func (d *switchDialog) View(width, height int) string {
+	width, height = max(1, width), max(1, height)
+	header := ansi.Truncate("Switch agent · "+d.task.Slug, width, "…")
+	footer := "↑/↓ select · Enter switch · Esc cancel"
+	var lines []string
 	if d.confirm {
+		prompt := "The agent is active. Interrupt it and switch?"
 		if d.fresh {
-			fmt.Fprintf(&b, "\n\nNo saved session ID for %s. Stop the current agent and start %s fresh with a handoff? y / n", d.agents[d.selected], d.agents[d.selected])
-		} else {
-			b.WriteString("\n\nThe agent is active. Interrupt it and switch? y / n")
+			prompt = "No saved session ID. Stop the current agent and start a fresh session with a handoff?"
+		}
+		lines = strings.Split(ansi.Wrap(prompt+"\n\nTarget: "+d.agents[d.selected], width, ""), "\n")
+		footer = "y/Enter confirm · n/Esc cancel"
+	} else {
+		for i, label := range d.labels {
+			mark := "  "
+			if i == d.selected {
+				mark = "› "
+			}
+			lines = append(lines, ansi.Truncate(mark+label, width, "…"))
 		}
 	}
 	if d.busy {
-		b.WriteString("\nSaving history and preparing handoff…")
+		footer = "Saving history and preparing handoff…"
 	}
 	if d.err != "" {
-		b.WriteString("\n" + d.err)
+		lines = append(lines, "")
+		lines = append(lines, strings.Split(ansi.Wrap(d.err, width, ""), "\n")...)
 	}
-	return b.String()
+	footerLines := strings.Split(ansi.Wrap(footer, width, ""), "\n")
+	rows := max(1, height-3-len(footerLines))
+	if len(lines) > rows {
+		footerLines = append(footerLines, "PgUp/PgDn scroll")
+		rows = max(1, rows-1)
+	}
+	if !d.confirm && !d.scrolled && len(d.labels) > 0 {
+		if d.selected < d.offset {
+			d.offset = d.selected
+		} else if d.selected >= d.offset+rows {
+			d.offset = d.selected - rows + 1
+		}
+	}
+	d.offset = min(d.offset, max(0, len(lines)-rows))
+	body := append([]string{header, ""}, lines[d.offset:min(len(lines), d.offset+rows)]...)
+	body = append(body, "")
+	body = append(body, footerLines...)
+	return strings.Join(body, "\n")
 }
 
 func (m *Model) openHistory() tea.Cmd {
@@ -308,7 +346,7 @@ func (m *Model) contextMessage(msg tea.Msg) bool {
 			t.pending = false
 			t.task = msg.task
 			if msg.err == nil {
-				t.pane = msg.pane
+				t.attachPane(msg.pane)
 				t.err = nil
 				if msg.pane != nil {
 					c, r := m.size()
@@ -325,6 +363,8 @@ func (m *Model) contextMessage(msg tea.Msg) bool {
 			m.switcher.confirm = true
 			m.switcher.fresh = errors.Is(msg.err, core.ErrFreshStartRequired)
 			m.switcher.busy = false
+			m.switcher.offset = 0
+			m.switcher.scrolled = false
 			return true
 		}
 		if msg.err != nil {

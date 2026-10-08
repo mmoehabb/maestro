@@ -23,12 +23,14 @@ import (
 )
 
 type tab struct {
-	task    store.Task
-	pane    *term.Pane
-	err     error
-	pending bool
-	status  git.Status
-	state   term.State
+	task          store.Task
+	pane          *term.Pane
+	err           error
+	pending       bool
+	status        git.Status
+	state         term.State
+	stateRevision uint64
+	statePane     *term.Pane
 }
 type (
 	tickMsg           time.Time
@@ -76,7 +78,7 @@ type Model struct {
 	orderPending            bool
 	notifier                notify.Notifier
 	notificationFailed      bool
-	observed                map[int64]term.State
+	observed                map[int64]activityObservation
 	attention               map[int64]time.Time
 
 	forgeUI                                                   *forgeDialog
@@ -104,7 +106,7 @@ func New(s *core.TaskService, r *core.Runtime, focus string) *Model {
 	return &Model{
 		credentials: make(chan credentialRequest, 16),
 		service:     s, runtime: r, cfg: s.Config, focus: focus, width: 80, height: 24,
-		observed: make(map[int64]term.State), attention: make(map[int64]time.Time),
+		observed: make(map[int64]activityObservation), attention: make(map[int64]time.Time),
 		prefix: term.ActivePrefix(s.Config.Prefix, s.Config.PrefixFallback, false),
 	}
 }
@@ -146,6 +148,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.notify("GitHub login completed. Retry the GitHub command.")
 		}
+	case inputMsg:
+		return m, m.inputReply(msg)
 	case themeSavedMsg:
 		if m.themes == msg.picker {
 			m.themes.busy = false
@@ -245,7 +249,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		for _, task := range msg.tasks {
 			m.tabs = append(m.tabs, tab{task: task, state: term.Starting})
-			m.observed[task.ID] = term.Starting
+			m.observed[task.ID] = activityObservation{state: term.Starting}
 			if task.Slug == m.focus {
 				m.active = len(m.tabs) - 1
 			}
@@ -257,6 +261,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(m.tabs) == 0 {
 			m.dialog = newDialog(m.cfg, m.service.Repo.DefaultBranch)
+			cmds = append(cmds, inputCommand(&m.dialog.fields[0], m.dialog.fields[0].Focus()))
 		}
 		return m, tea.Batch(cmds...)
 	case startedMsg:
@@ -264,7 +269,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.tabs[i].task.ID == msg.id {
 				t := &m.tabs[i]
 				t.pending = false
-				t.pane = msg.pane
+				t.attachPane(msg.pane)
 				t.err = msg.err
 				if msg.err == nil {
 					// Start may have completed a persisted pending switch from an earlier run.
@@ -293,7 +298,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.dialog = nil
 		m.tabs = append(m.tabs, tab{task: msg.task, state: term.Starting})
-		m.observed[msg.task.ID] = term.Starting
+		m.observed[msg.task.ID] = activityObservation{state: term.Starting}
 		m.active = len(m.tabs) - 1
 		return m, m.launch(m.active, false)
 	case archivedMsg:
@@ -307,6 +312,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			slug := m.tabs[i].task.Slug
+			delete(m.observed, msg.id)
+			delete(m.attention, msg.id)
 			m.tabs = append(m.tabs[:i], m.tabs[i+1:]...)
 			if i < m.active {
 				m.active--
@@ -338,9 +345,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notify(msg.Err.Error())
 		}
 		for i := range m.tabs {
-			if m.tabs[i].task.ID == msg.TaskID && msg.State != "" && (msg.Pane == nil || msg.Pane == m.tabs[i].pane) {
-				m.tabs[i].state = msg.State
-
+			if m.tabs[i].task.ID == msg.TaskID && m.tabs[i].acceptActivity(msg.Pane, msg.State, msg.Revision) {
 				if msg.State == term.Done {
 					m.nextStatus = time.Time{}
 				}
@@ -378,7 +383,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frame++
 		for i := range m.tabs {
 			if m.tabs[i].pane != nil {
-				m.tabs[i].state = m.tabs[i].pane.Snapshot(false).State
+				s := m.tabs[i].pane.Snapshot(false)
+				m.tabs[i].acceptActivity(m.tabs[i].pane, s.State, s.Revision)
 			}
 		}
 		var refresh tea.Cmd
@@ -513,7 +519,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.palette != nil {
-			return m, m.palettePaste(msg)
+			return m, m.paletteInput(msg)
 		}
 		if m.diff != nil {
 			return m, nil
@@ -533,7 +539,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.dialog != nil {
-			return m, m.dialogPaste(msg)
+			return m, m.dialogInput(msg)
 		}
 		if !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Paste(msg.Content)
@@ -649,7 +655,7 @@ func (m *Model) View() tea.View {
 		cursor = nil
 	}
 	if m.switcher != nil {
-		body = m.switcher.View()
+		body = m.switcher.View(cols, rows)
 		cursor = nil
 	}
 	if m.history != nil {

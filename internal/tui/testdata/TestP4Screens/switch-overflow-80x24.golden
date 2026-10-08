@@ -6,19 +6,19 @@
 
   Switch agent · fix-auth
   
-  The agent is active. Interrupt it and switch?
+    custom-agent-10 · previously used
+    custom-agent-11 · previously used
+    custom-agent-12 · previously used
+    custom-agent-13 · previously used
+    custom-agent-14 · previously used
+    custom-agent-15 · previously used
+    custom-agent-16 · previously used
+    custom-agent-17 · previously used
+    custom-agent-18 · previously used
+  › custom-agent-19 · previously used
   
-  Target: agy
-  
-  y/Enter confirm · n/Esc cancel
-  
-  
-  
-  
-  
-  
-  
-  
+  ↑/↓ select · Enter switch · Esc cancel
+  PgUp/PgDn scroll
   ────────────────────────────────────────────────────────────────────────────
   maestro/fix-auth                                             +0 −0 · 0 files
   alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

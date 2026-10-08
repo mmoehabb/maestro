@@ -84,6 +84,7 @@ func (m *Model) dispatch(key string) tea.Cmd {
 		return tea.Quit
 	case "c":
 		m.dialog = newDialog(m.cfg, m.service.Repo.DefaultBranch)
+		return inputCommand(&m.dialog.fields[0], m.dialog.fields[0].Focus())
 	case "a":
 		return m.openSwitch()
 	case "h":

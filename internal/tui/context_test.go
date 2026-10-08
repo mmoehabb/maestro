@@ -130,8 +130,8 @@ func TestFreshTargetConfirmationFromCLI(t *testing.T) {
 	if m.switcher == nil || !m.switcher.confirm || !m.switcher.fresh || m.switcher.agents[m.switcher.selected] != "agy" {
 		t.Fatal("missing target confirmation")
 	}
-	if !strings.Contains(m.switcher.View(), "start agy fresh with a handoff") {
-		t.Fatal(m.switcher.View())
+	if view := strings.Join(strings.Fields(m.switcher.View(80, 20)), " "); !strings.Contains(view, "fresh session with a handoff") || !strings.Contains(view, "Target: agy") {
+		t.Fatal(view)
 	}
 	if m.tabs[0].err != nil {
 		t.Fatal("confirmation replaced outgoing pane with an error")

@@ -7,9 +7,20 @@ import (
 	"time"
 )
 
-// SaveWorkflow changes only lifecycle/forge fields, never overwriting concurrent
-// transcript, notes, or agent updates. The event and state commit together.
+// SaveWorkflow changes lifecycle/forge fields and appends tasks becoming visible,
+// never overwriting concurrent transcript, notes, or agent updates. The event,
+// state, and any new position commit together.
 func (s *Store) SaveWorkflow(ctx context.Context, task Task, kind string) error {
+	return s.saveWorkflow(ctx, &task, kind)
+}
+
+// SaveReopened returns the append position allocated by the committed reopen.
+func (s *Store) SaveReopened(ctx context.Context, task Task) (Task, error) {
+	err := s.saveWorkflow(ctx, &task, "reopened")
+	return task, err
+}
+
+func (s *Store) saveWorkflow(ctx context.Context, task *Task, kind string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -32,6 +43,12 @@ func (s *Store) SaveWorkflow(ctx context.Context, task Task, kind string) error 
 	}
 	if !valid {
 		return fmt.Errorf("invalid lifecycle transition %s → %s", current, task.Lifecycle)
+	}
+	if current == "archived" && task.Lifecycle != "archived" {
+		task.TabOrder, err = appendTaskOrder(ctx, tx, task.ID)
+		if err != nil {
+			return err
+		}
 	}
 	now := time.Now().UnixMilli()
 	var archivedAt any

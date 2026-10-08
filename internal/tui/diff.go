@@ -20,6 +20,7 @@ type diffView struct {
 	loading            bool
 	err                error
 	offset, horizontal int
+	columns            int
 }
 type diffMsg struct {
 	view   *diffView
@@ -47,7 +48,7 @@ func (m *Model) loadDiff(task store.Task) tea.Cmd {
 
 func (m *Model) diffKey(msg tea.KeyPressMsg) tea.Cmd {
 	d := m.diff
-	_, height := m.size()
+	width, height := m.size()
 	switch msg.String() {
 	case "esc", "q":
 		m.diff = nil
@@ -69,23 +70,14 @@ func (m *Model) diffKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "left", "h":
 		d.horizontal = max(0, d.horizontal-8)
 	case "right", "l":
-		d.horizontal = min(MaxDiffColumns, d.horizontal+8)
+		d.prepareLines()
+		d.horizontal = min(max(0, d.columns-width), d.horizontal+8)
 	}
 	return nil
 }
 
-const MaxDiffColumns = 4096
-
-func (d *diffView) view(width, height int, p config.Palette) string {
-	title := colored(p.Accent).Bold(true).Render("Diff · " + d.task.Slug + " · base " + d.task.BaseBranch)
-	footer := "↑/↓ scroll · ←/→ pan · r refresh · Esc return"
-	if d.loading {
-		return title + "\n\nLoading diff…\n" + footer
-	}
-	if d.err != nil {
-		return title + "\n\n" + d.err.Error() + "\n" + footer
-	}
-	if d.lines == nil {
+func (d *diffView) prepareLines() {
+	if d.lines == nil && !d.loading && d.err == nil {
 		content := strings.TrimSuffix(ansi.Strip(d.result.Patch), "\n")
 		if content == "" {
 			content = "No tracked changes against base."
@@ -97,7 +89,24 @@ func (d *diffView) view(width, height int, p config.Palette) string {
 			content += "\n[Diff truncated at 2 MiB; inspect the full diff in your editor.]"
 		}
 		d.lines = strings.Split(strings.ReplaceAll(content, "\t", "    "), "\n")
+		d.columns = 0
+		for _, line := range d.lines {
+			d.columns = max(d.columns, ansi.StringWidth(line))
+		}
 	}
+}
+
+func (d *diffView) view(width, height int, p config.Palette) string {
+	title := colored(p.Accent).Bold(true).Render("Diff · " + d.task.Slug + " · base " + d.task.BaseBranch)
+	footer := "↑/↓ scroll · ←/→ pan · r refresh · Esc return"
+	if d.loading {
+		return title + "\n\nLoading diff…\n" + footer
+	}
+	if d.err != nil {
+		return title + "\n\n" + d.err.Error() + "\n" + footer
+	}
+	d.prepareLines()
+	d.horizontal = min(d.horizontal, max(0, d.columns-max(1, width)))
 	lines := d.lines
 	rows := max(1, height-3)
 	d.offset = min(d.offset, max(0, len(lines)-rows))

@@ -27,7 +27,7 @@ func (m *Model) openPalette() tea.Cmd {
 	input.CharLimit = 256
 	input.SetVirtualCursor(true)
 	m.palette = &paletteView{input: input}
-	return m.palette.input.Focus()
+	return inputCommand(&m.palette.input, m.palette.input.Focus())
 }
 
 // fuzzyScore prefers contiguous matches and word starts; ties retain the
@@ -119,20 +119,18 @@ func (m *Model) paletteKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return m.dispatch(e.key)
 	}
+	return m.paletteInput(msg)
+}
+
+func (m *Model) paletteInput(msg tea.Msg) tea.Cmd {
+	p := m.palette
 	old := p.input.Value()
 	var cmd tea.Cmd
 	p.input, cmd = p.input.Update(msg)
 	if p.input.Value() != old {
 		p.selected = 0
 	}
-	return cmd
-}
-
-func (m *Model) palettePaste(msg tea.PasteMsg) tea.Cmd {
-	var cmd tea.Cmd
-	m.palette.input, cmd = m.palette.input.Update(msg)
-	m.palette.selected = 0
-	return cmd
+	return inputCommand(&p.input, cmd)
 }
 
 func (m *Model) paletteView(width, height int) string {

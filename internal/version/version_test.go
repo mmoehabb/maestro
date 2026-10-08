@@ -19,6 +19,20 @@ func TestGet(t *testing.T) {
 	}
 }
 
+func TestModuleVersion(t *testing.T) {
+	for _, tc := range []struct{ linked, module, want string }{
+		{"dev", "v1.2.3", "v1.2.3"},
+		{"dev", "v1.2.4-0.20260101000000-abcdef123456", "v1.2.4-0.20260101000000-abcdef123456"},
+		{"dev", "(devel)", "dev"},
+		{"dev", "", "dev"},
+		{"v2.0.0", "v1.2.3", "v2.0.0"},
+	} {
+		if got := moduleVersion(tc.linked, tc.module); got != tc.want {
+			t.Errorf("moduleVersion(%q, %q) = %q, want %q", tc.linked, tc.module, got, tc.want)
+		}
+	}
+}
+
 func TestString(t *testing.T) {
 	s := Info{Version: "1.2.3", Commit: "abc", Date: "d", GoVersion: "go1", Platform: "x/y"}.String()
 	if want := "maestro 1.2.3 (abc, d) go1 x/y"; s != want {

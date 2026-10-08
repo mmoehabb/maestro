@@ -33,6 +33,7 @@ func Get() Info {
 		Platform:  runtime.GOOS + "/" + runtime.GOARCH,
 	}
 	if bi, ok := debug.ReadBuildInfo(); ok {
+		info.Version = moduleVersion(info.Version, bi.Main.Version)
 		for _, s := range bi.Settings {
 			switch s.Key {
 			case "vcs.revision":
@@ -50,6 +51,13 @@ func Get() Info {
 		info.Commit = info.Commit[:12]
 	}
 	return info
+}
+
+func moduleVersion(version, module string) string {
+	if version == "dev" && module != "" && module != "(devel)" {
+		return module
+	}
+	return version
 }
 
 // String renders a one-line human-readable version.

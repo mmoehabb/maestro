@@ -3,6 +3,7 @@ module github.com/mmoehabb/maestro
 go 1.26.0
 
 require (
+	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261004011457-ad85c59fdf4e
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/go-github/v74 v74.0.0
 	github.com/spf13/cobra v1.10.2
@@ -10,6 +11,8 @@ require (
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
+	github.com/charmbracelet/x/exp/golden v0.0.0-20251109135125-8916d276318f // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 )
 

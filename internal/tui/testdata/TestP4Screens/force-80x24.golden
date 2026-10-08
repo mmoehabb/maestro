@@ -1,0 +1,24 @@
+  ♪  maestro / repo                                                 3 sessions
+
+     ⠋ fix-auth  codex    │   ✓ add-tui  codex    │    ⚑ refactor  codex     │
+  ────────────────────────────────────────────────────────────────────────────
+  CODEX / fix-auth                                                   ⠋ Working
+
+  Force cleanup · fix-auth
+  
+  Stops the agent and deletes all uncommitted files in its worktree.
+  Local commits are retained in a recovery ref; history stays saved.
+  
+  Type the task slug to confirm, then Enter:
+  >  
+  
+  
+  Esc cancel
+  
+  
+  
+  
+  
+  ────────────────────────────────────────────────────────────────────────────
+  maestro/fix-auth                                             +0 −0 · 0 files
+  alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

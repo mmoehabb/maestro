@@ -1,48 +1,48 @@
- ♪ maestro /repo
- ⠋ [38;2;250;179;135m#42![m[38;2;243;139;168m![m fix-auth · codex  ✓ ⊕ add-tui · codex  ⚑ ↑ refactor · codex 
-Force cleanup · fix-auth
 
-Stops the agent and deletes all uncommitted files in its worktree.
-Local commits are retained in a recovery ref; history stays saved.
+   ♪  maestro / repo                                                                                                                               3 sessions
 
-Type the task slug to confirm, then Enter:
->  
+                  ⠋ #42!! fix-auth  codex               │               ✓ ⊕ add-tui  codex               │               ⚑ ↑ refactor  codex                │
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+   CODEX / fix-auth                                                                                                                                 ⠋ Working
 
-Esc cancel
+   Force cleanup · fix-auth
+   
+   Stops the agent and deletes all uncommitted files in its worktree.
+   Local commits are retained in a recovery ref; history stays saved.
+   
+   Type the task slug to confirm, then Enter:
+   >  
+   
+   
+   Esc cancel
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
 
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   maestro/fix-auth  #42!! CI failure · review changes_requested                                                                              +0 −0 · 0 files
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- codex · maestro/fix-auth · +0 −0 · 0 files · ↑0 ↓0 · pr_open · #42 · CI failure · review changes_requested
-ctrl+b ? help · ctrl+b c new · ctrl+b q quit
+   alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help   ctrl+b : actions                                                                               

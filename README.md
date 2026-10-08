@@ -77,6 +77,10 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | Keys | Action |
 |---|---|
 | `alt+1…9`, `alt+h` / `alt+l` | Select, previous / next tab |
+| `prefix :` | Search actions and tasks |
+| `prefix D` | View diff against the task base |
+| `prefix s` | Toggle tabs / sidebar |
+| `prefix T` | Preview and save a color theme |
 | `prefix a` | Switch agents with context handoff |
 | `prefix h` | Task timeline and expandable conversation history |
 | `prefix H` | Copy the handoff instruction for manual-prompt agents |
@@ -94,7 +98,84 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix prefix` | Send the prefix itself to the agent |
 | `prefix q` | Stop agents, save and quit |
 
-Click tabs to switch. Mouse input within the terminal is forwarded; the wheel enters Maestro's scrollback. Background panes keep processing output. Runtime icons show Starting, Working, Done, NeedsInput, Exited and Crashed. Done uses native turn signals when available. A recognized native turn stays Working through silent tool execution; terminal notifications and the configurable quiet timer serve as fallbacks when native monitoring is unavailable. These fallbacks are heuristics, not proof that a long-running tool has finished. Prompt hints also use heuristics. `icons = "nerd"` conservatively uses Unicode glyphs because terminal glyph width does not reliably identify installed fonts; `ascii` uses ASCII runtime icons.
+Click tabs to switch or drag to reorder. Mouse input within the terminal is forwarded; the wheel enters Maestro's scrollback. Background panes keep processing output. Runtime icons show Starting, Working, Done, NeedsInput, Exited and Crashed. Done uses native turn signals when available. A recognized native turn stays Working through silent tool execution; terminal notifications and the configurable quiet timer serve as fallbacks when native monitoring is unavailable. These fallbacks are heuristics, not proof that a long-running tool has finished. Prompt hints also use heuristics. `icons = "nerd"` conservatively uses Unicode glyphs because terminal glyph width does not reliably identify installed fonts; `ascii` uses ASCII runtime icons.
+
+### Palette, diff, layouts, and themes
+
+Use `prefix :` to search actions and tasks with fuzzy matching. Arrow keys select,
+Enter runs the selection, and Escape returns to the agent. Actions retain their
+usual confirmations. `prefix ?` opens scrollable help.
+
+`prefix D` opens a read-only diff of the task base against the current tracked
+working tree, including committed, staged, and unstaged changes. Untracked paths
+are listed separately and binary changes are identified. Use arrows/j/k to
+scroll, left/right to pan, `r` to refresh, and Escape to close. Output is capped
+at 2 MiB with an explicit truncation notice. External diff tools and textconv
+filters are disabled in this view. `prefix d` still hides the current tab.
+
+`prefix s` toggles a sidebar; below 72 columns it falls back to top tabs.
+Drag a task onto another task to reorder in either layout. The order is saved
+in SQLite and restored on the next launch. Your active agent stays selected.
+
+Choose from four built-in themes:
+
+| Theme | Command name | Colors |
+|---|---|---|
+| Forest | `dark` | Forest green, peach, and sage |
+| Paper | `light` | Warm cream, ink, and terracotta |
+| Catppuccin | `catppuccin` | Charcoal with pastel blue and lavender |
+| Tokyo Night | `tokyo-night` | Deep navy, blue, and violet |
+
+```sh
+maestro theme                     # list themes and the current selection
+maestro theme tokyo-night         # save globally
+maestro theme light --local       # save for this repository
+maestro theme auto                # follow the terminal background
+```
+
+Inside the TUI, use `prefix T` or search “Choose color theme” in the command
+palette. ↑/↓ previews each theme immediately; Enter saves and Escape restores
+the previous choice. The picker saves globally unless the repository already
+sets its own `theme`, in which case it updates that override. CLI changes apply
+on the next TUI launch. `--local` resolves linked worktrees to the main checkout.
+Existing configuration comments and unrelated settings are preserved.
+
+`auto` is the default selection mode rather than an additional palette.
+Set `theme` to `auto`, `dark`, `light`, `catppuccin`, or `tokyo-night`. Auto asks
+the terminal for its background color and defaults to dark if it gets no reply.
+The default dark palette matches the website preview: a forest-green surface,
+peach accent, and sage status colors. Light mode uses the site's cream and ink
+palette. The shell has spaced tabs, an agent/status heading, inset panes, and
+separate Git status and shortcut bars; short terminals use compact spacing.
+Explicit Catppuccin and Tokyo Night palettes remain available.
+Themes style Maestro's interface; agent programs retain their own ANSI colors.
+Custom palettes require all eight colors:
+
+```toml
+theme = "my-theme"
+
+[themes.my-theme]
+background = "#20242c"
+foreground = "#e5e9f0"
+muted = "#adb8c9"
+accent = "#8fbcff"
+success = "#a3d9a5"
+warning = "#f0ca80"
+error = "#f49b9b"
+merged = "#c9adf0"
+```
+
+Background Done/NeedsInput transitions show local alerts and briefly highlight
+the task. Desktop delivery honors `[activity] notify_on = ["done", "needs_input"]`;
+use `notify_on = []` to disable it. An unfocused terminal also receives alerts for
+its selected task when focus reporting is supported. Linux uses `notify-send`,
+macOS uses `osascript`, and Windows uses PowerShell and a temporary notification-area icon.
+OS permissions, desktop services, and notification settings determine delivery.
+Missing helpers leave the in-app alerts available and report availability once.
+
+See [custom agent configuration](docs/CUSTOM_AGENTS.md) for complete template,
+session identity, manual prompt, handoff, and troubleshooting guidance, and
+[the P4 UX checklist](docs/P4_UX.md) for manual acceptance checks.
 
 ### Archive and delete tabs
 
@@ -243,7 +324,7 @@ formats are not stable public APIs.
 
 ### Verification
 
-The test suite includes real PTY processes, three-task restoration, a controlled Codex → agy → Codex handoff, pending-switch recovery, P1 database migration, duplicate-free transcript imports, native activity precedence, retained history after worktree deletion, and UI snapshots at 80×24 and 160×48. Regenerate snapshots with `go test ./internal/tui -update` and review the diff. A fake agent is available with `go build -o /tmp/maestro-fakeagent ./internal/testutil/fakeagent`; configure `new = ["new", "{{.SessionID}}"]`, `resume = ["resume", "{{.SessionID}}"]` and `generate_session_id = true` to try it without API credentials.
+The test suite includes teatest/v2 screen coverage for every P4 view and existing dialog, persisted drag ordering, bounded diff loading, notification filtering, and real PTY processes, three-task restoration, a controlled Codex → agy → Codex handoff, pending-switch recovery, P1 database migration, duplicate-free transcript imports, native activity precedence, retained history after worktree deletion, and UI snapshots at 80×24 and 160×48. Regenerate snapshots with `go test ./internal/tui -update` and review the diff. A fake agent is available with `go build -o /tmp/maestro-fakeagent ./internal/testutil/fakeagent`; configure `new = ["new", "{{.SessionID}}"]`, `resume = ["resume", "{{.SessionID}}"]` and `generate_session_id = true` to try it without API credentials.
 
 Linux terminal smoke tests and Windows/macOS cross-builds have been performed. Read-only parser checks also exercise existing local Codex/agy transcripts and OpenCode native history. Native Windows/macOS behavior and authenticated live cross-agent conversations remain manual checks. GitHub PR, CI, review, merge, cleanup, and reopen behavior is covered by fake-server and integration tests; a real authenticated GitHub run remains a manual acceptance check.
 

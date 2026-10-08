@@ -17,7 +17,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/term"
 )
 
-var update = flag.Bool("update", false, "update TUI golden files")
+func updateGolden() bool { return flag.Lookup("update").Value.(flag.Getter).Get().(bool) }
 
 func testModel(t *testing.T) *Model {
 	t.Helper()
@@ -53,7 +53,7 @@ func TestMainAndDialogSnapshots(t *testing.T) {
 			}
 			got := ansi.Strip(m.View().Content) + "\n"
 			path := filepath.Join("testdata", name+".golden")
-			if *update {
+			if updateGolden() {
 				if err := os.MkdirAll("testdata", 0o755); err != nil {
 					t.Fatal(err)
 				}

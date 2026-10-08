@@ -35,7 +35,7 @@ func TestContextSnapshots(t *testing.T) {
 			}
 			got := ansi.Strip(m.View().Content) + "\n"
 			path := filepath.Join("testdata", kind+"-"+size.name+".golden")
-			if *update {
+			if updateGolden() {
 				if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
 					t.Fatal(err)
 				}

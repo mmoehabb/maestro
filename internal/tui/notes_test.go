@@ -64,7 +64,7 @@ func TestNotesSnapshots(t *testing.T) {
 		m.openNotes()
 		got := ansi.Strip(m.View().Content) + "\n"
 		path := filepath.Join("testdata", "notes-"+size.name+".golden")
-		if *update {
+		if updateGolden() {
 			if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
 				t.Fatal(err)
 			}

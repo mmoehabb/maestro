@@ -1,0 +1,48 @@
+
+   ♪  maestro / repo                                                                                                                               3 sessions
+
+                   ⠋ fix-auth  codex                 │                ✓ add-tui  codex                 │                 ⚑ refactor  codex                  │
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   CODEX / fix-auth                                                                                                                                 ⠋ Working
+
+   Command palette
+   > Search actions or tasks…                                                                                                                               
+   
+   > New task  [ctrl+b c]
+     Switch agent  [ctrl+b a]
+     Task history  [ctrl+b h]
+     Edit task notes  [ctrl+b n]
+     Copy manual handoff instruction  [ctrl+b H] — No manual handoff instruction
+     View diff against base  [ctrl+b D]
+     Toggle tabs / sidebar  [ctrl+b s]
+     Choose color theme  [ctrl+b T]
+     Help  [ctrl+b ?]
+     Push branch  [ctrl+b p]
+     Create / open pull request  [ctrl+b P]
+     Merge pull request  [ctrl+b m]
+     Archive / clean up worktree  [ctrl+b &]
+     Reopen archived task  [ctrl+b u]
+     Hide tab (preserve worktree)  [ctrl+b d]
+     Stop agent  [ctrl+b x]
+     Restart / resume agent  [ctrl+b r]
+     Start a fresh session  [ctrl+b R]
+     Scroll / copy terminal history  [ctrl+b []
+     Open editor  [ctrl+b e]
+     Open shell in worktree  [ctrl+b t]
+     Suspend Maestro  [ctrl+b z]
+     Quit and save sessions  [ctrl+b q]
+     Task:  · fix-auth · codex
+     Task:  · add-tui · codex
+     Task:  · refactor · codex
+   
+   26 matches · ↑/↓ select · Enter run · Esc cancel
+   
+   
+   
+   
+
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   maestro/fix-auth                                                                                                                           +0 −0 · 0 files
+
+   alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help   ctrl+b : actions                                                                               

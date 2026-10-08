@@ -1,0 +1,48 @@
+
+   ♪  maestro / repo                                                                                                                               3 sessions
+
+                   ⠋ fix-auth  codex                 │                ✓ add-tui  codex                 │                 ⚑ refactor  codex                  │
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   CODEX / fix-auth                                                                                                                                 ⠋ Working
+
+   Diff · fix-auth · base main
+   
+   diff --git a/auth.go b/auth.go
+   --- a/auth.go
+   +++ b/auth.go
+   @@ -1 +1 @@
+   -expired := true
+   +expired := false
+   Binary files a/logo.png and b/logo.png differ
+   
+   Untracked files (not included in patch):
+   notes.txt
+   
+   [Diff truncated at 2 MiB; inspect the full diff in your editor.]
+   ↑/↓ scroll · ←/→ pan · r refresh · Esc return
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   maestro/fix-auth                                                                                                                           +0 −0 · 0 files
+
+   alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help   ctrl+b : actions                                                                               

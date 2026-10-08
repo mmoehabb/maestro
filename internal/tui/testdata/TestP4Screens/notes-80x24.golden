@@ -1,0 +1,24 @@
+  ♪  maestro / repo                                                 3 sessions
+
+     ⠋ fix-auth  codex    │   ✓ add-tui  codex    │    ⚑ refactor  codex     │
+  ────────────────────────────────────────────────────────────────────────────
+  CODEX / fix-auth                                                   ⠋ Working
+
+  Task notes · fix-auth
+  Included in the next agent handoff.
+  
+  Keep the public API compatible.                                           
+  TODO: verify session expiry.                                              
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+  Ctrl+S save · Esc cancel · Enter new line
+  
+  ────────────────────────────────────────────────────────────────────────────
+  maestro/fix-auth                                             +0 −0 · 0 files
+  alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

@@ -11,6 +11,7 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 
 	"github.com/mmoehabb/maestro/internal/config"
+	"github.com/mmoehabb/maestro/internal/notify"
 	"github.com/mmoehabb/maestro/internal/tui"
 )
 
@@ -49,6 +50,7 @@ func RunSwitch(ctx context.Context, dir, focus, target string, output io.Writer)
 	defer func() { err = errors.Join(err, r.Close()) }()
 	model := tui.New(s, r, focus)
 	model.SetSwitchAgent(target)
+	model.SetNotifier(notify.Desktop{})
 	_, err = tea.NewProgram(model, tea.WithContext(ctx), tea.WithInput(os.Stdin), tea.WithOutput(output)).Run()
 	return err
 }

@@ -1,0 +1,24 @@
+  ♪  maestro / repo                                                 3 sessions
+
+     ⠋ fix-auth  codex    │   ✓ add-tui  codex    │    ⚑ refactor  codex     │
+  ────────────────────────────────────────────────────────────────────────────
+  CODEX / fix-auth                                                   ⠋ Working
+
+  Archive · fix-auth
+  
+  Stops the agent and saves its final history.
+  
+  c  Clean worktree and branch after safety checks
+  k  Keep worktree and branch; hide the tab
+  f  Force cleanup (requires another confirmation)
+  
+  
+  Esc cancel
+  
+  
+  
+  
+  
+  ────────────────────────────────────────────────────────────────────────────
+  maestro/fix-auth                                             +0 −0 · 0 files
+  alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

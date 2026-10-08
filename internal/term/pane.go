@@ -13,6 +13,7 @@ import (
 
 type Snapshot struct {
 	State          State
+	Revision       uint64
 	Screen, Title  string
 	X, Y           int
 	CursorVisible  bool
@@ -118,10 +119,11 @@ func Start(cmd *exec.Cmd, cols, rows int, idle time.Duration, hints []string) (*
 		if cmd.ProcessState != nil {
 			p.exitCode = cmd.ProcessState.ExitCode()
 		}
-		p.activity.State = Exited
+		state := Exited
 		if p.exitCode != 0 {
-			p.activity.State = Crashed
+			state = Crashed
 		}
+		p.activity.setState(state)
 		p.mu.Unlock()
 		p.invalidate()
 		close(p.done)
@@ -141,7 +143,7 @@ func (p *Pane) Snapshot(render bool) Snapshot {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.activity.Tick(time.Now())
-	s := Snapshot{State: p.activity.State, Title: p.emu.Title(), ExitCode: p.exitCode, InputError: p.input.Err(), HasOutput: p.hasOutput, MouseReporting: p.emu.MouseReporting()}
+	s := Snapshot{State: p.activity.State, Revision: p.activity.Revision, Title: p.emu.Title(), ExitCode: p.exitCode, InputError: p.input.Err(), HasOutput: p.hasOutput, MouseReporting: p.emu.MouseReporting()}
 	if render {
 		s.Screen = p.emu.Render()
 		s.X, s.Y, s.CursorVisible = p.emu.Cursor()
@@ -210,9 +212,11 @@ func (p *Pane) Stop() {
 	})
 }
 
-func (p *Pane) NativeEvent(kind string) {
+func (p *Pane) NativeEvent(kind string) Snapshot {
 	p.mu.Lock()
 	p.activity.NativeEvent(kind)
+	state := Snapshot{State: p.activity.State, Revision: p.activity.Revision}
 	p.mu.Unlock()
 	p.invalidate()
+	return state
 }

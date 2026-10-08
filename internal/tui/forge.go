@@ -20,6 +20,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/forge/github"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/store"
+	"github.com/mmoehabb/maestro/internal/term"
 )
 
 type forgeDialog struct {
@@ -323,6 +324,7 @@ func (m *Model) workflowResult(msg workflowMsg) tea.Cmd {
 	}
 	if msg.action == "reopen" {
 		m.tabs = append(m.tabs, tab{task: msg.task})
+		m.observed[msg.task.ID] = activityObservation{state: term.Starting}
 		m.active = len(m.tabs) - 1
 		return m.launch(m.active, false)
 	}
@@ -344,6 +346,8 @@ func (m *Model) applyTask(task store.Task) {
 			continue
 		}
 		if task.Lifecycle == "archived" {
+			delete(m.observed, task.ID)
+			delete(m.attention, task.ID)
 			m.tabs = append(m.tabs[:i], m.tabs[i+1:]...)
 			if i < m.active {
 				m.active--

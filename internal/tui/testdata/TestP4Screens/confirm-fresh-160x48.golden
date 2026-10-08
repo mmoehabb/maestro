@@ -8,7 +8,7 @@
 
    Switch agent · fix-auth
    
-   The agent is active. Interrupt it and switch?
+   No saved session ID. Stop the current agent and start a fresh session with a handoff?
    
    Target: agy
    

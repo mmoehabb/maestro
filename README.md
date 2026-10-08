@@ -106,6 +106,9 @@ Click tabs to switch or drag to reorder. Mouse input within the terminal is forw
 Use `prefix :` to search actions and tasks with fuzzy matching. Arrow keys select,
 Enter runs the selection, and Escape returns to the agent. Actions retain their
 usual confirmations. `prefix ?` opens scrollable help.
+Clipboard paste and terminal bracketed paste both work in the palette. Agent
+switching keeps the selected item visible in long lists; use PgUp/PgDn or the
+mouse wheel to read long diagnostics and confirmation text.
 
 `prefix D` opens a read-only diff of the task base against the current tracked
 working tree, including committed, staged, and unstaged changes. Untracked paths
@@ -113,10 +116,13 @@ are listed separately and binary changes are identified. Use arrows/j/k to
 scroll, left/right to pan, `r` to refresh, and Escape to close. Output is capped
 at 2 MiB with an explicit truncation notice. External diff tools and textconv
 filters are disabled in this view. `prefix d` still hides the current tab.
+Horizontal scrolling reaches the end of every retained line, including long
+minified files, and stops at the last useful column.
 
 `prefix s` toggles a sidebar; below 72 columns it falls back to top tabs.
 Drag a task onto another task to reorder in either layout. The order is saved
 in SQLite and restored on the next launch. Your active agent stays selected.
+Reopening an archived task appends it to that saved order.
 
 Choose from four built-in themes:
 

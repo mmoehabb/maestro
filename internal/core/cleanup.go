@@ -176,5 +176,5 @@ func (s *TaskService) reopen(ctx context.Context, task store.Task) (store.Task, 
 		task.Lifecycle = "pr_open"
 	}
 	task.CleanupPending = false
-	return task, s.Store.SaveWorkflow(ctx, task, "reopened")
+	return s.Store.SaveReopened(ctx, task)
 }

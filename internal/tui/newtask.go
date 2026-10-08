@@ -61,17 +61,19 @@ func (d *newTaskDialog) inputIndex() int {
 	return d.field
 }
 
-func (d *newTaskDialog) focus(field int) {
+func (d *newTaskDialog) focus(field int) tea.Cmd {
 	for i := range d.fields {
 		d.fields[i].Blur()
 	}
 	d.field = (field + 4) % 4
 	if d.field != 2 {
-		d.fields[d.inputIndex()].Focus()
+		input := &d.fields[d.inputIndex()]
+		return inputCommand(input, input.Focus())
 	}
+	return nil
 }
 
-func (m *Model) dialogPaste(msg tea.PasteMsg) tea.Cmd {
+func (m *Model) dialogInput(msg tea.Msg) tea.Cmd {
 	d := m.dialog
 	if d.busy || d.field == 2 {
 		return nil
@@ -79,7 +81,7 @@ func (m *Model) dialogPaste(msg tea.PasteMsg) tea.Cmd {
 	i := d.inputIndex()
 	var cmd tea.Cmd
 	d.fields[i], cmd = d.fields[i].Update(msg)
-	return cmd
+	return inputCommand(&d.fields[i], cmd)
 }
 
 func (m *Model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -92,11 +94,9 @@ func (m *Model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.dialog = nil
 		return nil
 	case "tab", "down":
-		d.focus(d.field + 1)
-		return nil
+		return d.focus(d.field + 1)
 	case "shift+tab", "up":
-		d.focus(d.field - 1)
-		return nil
+		return d.focus(d.field - 1)
 	case "left":
 		if d.field == 2 {
 			d.selected = (d.selected + len(d.agents) - 1) % len(d.agents)
@@ -109,28 +109,20 @@ func (m *Model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	case "enter":
 		if d.field != 3 {
-			d.focus(d.field + 1)
-			return nil
+			return d.focus(d.field + 1)
 		}
 		return m.submitTask()
 	case "ctrl+enter":
 		return m.submitTask()
 	}
-	if d.field != 2 {
-		i := d.inputIndex()
-		var cmd tea.Cmd
-		d.fields[i], cmd = d.fields[i].Update(msg)
-		return cmd
-	}
-	return nil
+	return m.dialogInput(msg)
 }
 
 func (m *Model) submitTask() tea.Cmd {
 	d := m.dialog
 	if strings.TrimSpace(d.fields[0].Value()) == "" {
 		d.err = "Enter a title."
-		d.focus(0)
-		return nil
+		return d.focus(0)
 	}
 	d.busy = true
 	d.err = ""

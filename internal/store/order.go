@@ -2,8 +2,21 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
+
+// The caller commits visibility and position in the same transaction. Archived
+// positions are intentionally ignored: only the visible order is meaningful.
+func appendTaskOrder(ctx context.Context, tx *sql.Tx, id int64) (int, error) {
+	var position int
+	err := tx.QueryRowContext(ctx, `UPDATE tasks SET tab_order=(
+		SELECT COALESCE(MAX(tab_order)+1,0) FROM tasks
+		WHERE project_id=(SELECT project_id FROM tasks WHERE id=?)
+		AND lifecycle!='archived' AND id!=?
+	) WHERE id=? RETURNING tab_order`, id, id, id).Scan(&position)
+	return position, err
+}
 
 // ReorderTasks changes the complete visible order atomically. Stale requests
 // (for example after a task is archived) cannot silently drop or duplicate tasks.

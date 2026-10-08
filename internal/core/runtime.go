@@ -25,6 +25,7 @@ type Event struct {
 	SessionID int64
 	Pane      *term.Pane
 	State     term.State
+	Revision  uint64
 	Err       error
 }
 type running struct {
@@ -456,8 +457,8 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 		baseline[key] = true
 	}
 	recovering := false
-	emit := func(state term.State, err error) {
-		r.emit(Event{TaskID: entry.task.ID, SessionID: entry.session.ID, Pane: entry.pane, State: state, Err: err})
+	emit := func(state term.Snapshot, err error) {
+		r.emit(Event{TaskID: entry.task.ID, SessionID: entry.session.ID, Pane: entry.pane, State: state.State, Revision: state.Revision, Err: err})
 	}
 	warn := func(err error) {
 		if err == nil {
@@ -466,7 +467,7 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 		}
 		if err.Error() != lastWarning {
 			lastWarning = err.Error()
-			emit("", err)
+			emit(term.Snapshot{}, err)
 		}
 	}
 	discover := func() {
@@ -563,7 +564,11 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 			if !e.TS.IsZero() && e.TS.Before(entry.session.StartedAt) {
 				continue
 			}
-			entry.pane.NativeEvent(e.Kind)
+			state := entry.pane.NativeEvent(e.Kind)
+			// Capture state and revision together, before history persistence or
+			// another turn can advance the pane. Snapshots use the same revision.
+			last = state.State
+			emit(state, nil)
 			if e.Kind == "started" || e.Kind == "done" {
 				confirmHandoff()
 			}
@@ -572,8 +577,6 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 					r.recordWriteError(entry, err)
 				}
 				save()
-				last = entry.pane.Snapshot(false).State
-				emit(last, nil)
 			}
 		}
 	}
@@ -609,7 +612,7 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 			if entry.pane.Snapshot(false).ExitCode == 0 {
 				confirmHandoff()
 			}
-			emit(entry.pane.Snapshot(false).State, nil)
+			emit(entry.pane.Snapshot(false), nil)
 			return
 		case u, ok := <-updates:
 			if ok {
@@ -621,7 +624,7 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 			paneState := entry.pane.Snapshot(false)
 			if paneState.InputError != nil && inputWarning == nil {
 				inputWarning = paneState.InputError
-				emit("", inputWarning)
+				emit(term.Snapshot{}, inputWarning)
 			}
 			state := paneState.State
 			if !nativeTurns && paneState.HasOutput && now.Sub(entry.session.StartedAt) >= handoffStartupWindow && (state == term.Working || state == term.Done || state == term.NeedsInput) {
@@ -629,7 +632,7 @@ func (r *Runtime) watch(entry *running, a agent.Adapter) {
 			}
 			if state != last {
 				last = state
-				emit(state, nil)
+				emit(paneState, nil)
 				if state == term.Done {
 					save()
 					// Native completion updates last in apply, so a Done transition here

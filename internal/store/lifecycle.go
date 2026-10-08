@@ -25,6 +25,8 @@ func (s *Store) SetArchived(ctx context.Context, id int64, archived bool) error 
 	now := time.Now().UnixMilli()
 	if archived {
 		state, event, archivedAt = "archived", "archived", now
+	} else if _, err = appendTaskOrder(ctx, tx, id); err != nil {
+		return err
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE tasks SET lifecycle=?, archived_at=?, updated_at=? WHERE id=?", state, archivedAt, now, id); err != nil {
 		return err

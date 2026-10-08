@@ -299,6 +299,14 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if m.modal() {
 		m.dragID = 0
 		m.dragMoved = false
+		if m.switcher != nil && (mouse.Button == tea.MouseWheelUp || mouse.Button == tea.MouseWheelDown) {
+			if mouse.Button == tea.MouseWheelUp {
+				m.switcher.offset = max(0, m.switcher.offset-3)
+			} else {
+				m.switcher.offset += 3
+			}
+			m.switcher.scrolled = true
+		}
 		if m.diff != nil && (mouse.Button == tea.MouseWheelUp || mouse.Button == tea.MouseWheelDown) {
 			if mouse.Button == tea.MouseWheelUp {
 				m.diff.offset = max(0, m.diff.offset-3)

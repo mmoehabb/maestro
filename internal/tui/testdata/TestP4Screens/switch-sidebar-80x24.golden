@@ -1,0 +1,24 @@
+  ♪  maestro / repo                                                 3 sessions
+
+  TASKS  /  drag to reorder
+  ────────────────────────────────────────────────────────────────────────────
+                            CODEX / fix-auth                         ⠋ Working
+
+> ⠋ fix-auth  codex      │  Switch agent · fix-auth
+  ✓ add-tui  codex       │  
+  ⚑ refactor  codex      │    custom-agent-10 · previously used
+                         │    custom-agent-11 · previously used
+                         │    custom-agent-12 · previously used
+                         │    custom-agent-13 · previously used
+                         │    custom-agent-14 · previously used
+                         │    custom-agent-15 · previously used
+                         │    custom-agent-16 · previously used
+                         │    custom-agent-17 · previously used
+                         │    custom-agent-18 · previously used
+                         │  › custom-agent-19 · previously used
+                         │  
+                         │  ↑/↓ select · Enter switch · Esc cancel
+                         │  PgUp/PgDn scroll
+                            ──────────────────────────────────────────────────
+                            maestro/fix-auth                   +0 −0 · 0 files
+  alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

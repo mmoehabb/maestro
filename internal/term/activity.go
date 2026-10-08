@@ -21,12 +21,20 @@ const (
 // Activity is owned by the pane mutex. Idle never completes an untouched pane.
 type Activity struct {
 	State         State
+	Revision      uint64
 	LastOutput    time.Time
 	IdleAfter     time.Duration
 	Hints         []string
 	Native        bool
 	NativeWorking bool
 	tail          string
+}
+
+func (a *Activity) setState(state State) {
+	if a.State != state {
+		a.State = state
+		a.Revision++
+	}
 }
 
 func (a *Activity) Output(b []byte, now time.Time) {
@@ -40,11 +48,11 @@ func (a *Activity) Output(b []byte, now time.Time) {
 	}
 	text := strings.ToLower(ansi.Strip(a.tail))
 	if a.State != NeedsInput && (!a.Native || a.State != Done) {
-		a.State = Working
+		a.setState(Working)
 	}
 	for _, hint := range a.Hints {
 		if strings.Contains(text, strings.ToLower(hint)) {
-			a.State = NeedsInput
+			a.setState(NeedsInput)
 			break
 		}
 	}
@@ -54,12 +62,13 @@ func (a *Activity) Input(now time.Time) {
 	if a.State == Exited || a.State == Crashed {
 		return
 	}
-	a.State, a.LastOutput, a.tail = Working, now, ""
+	a.setState(Working)
+	a.LastOutput, a.tail = now, ""
 }
 
 func (a *Activity) Complete() {
 	if a.State == Working && !a.NativeWorking {
-		a.State = Done
+		a.setState(Done)
 		a.tail = ""
 	}
 }
@@ -91,13 +100,13 @@ func (a *Activity) NativeEvent(kind string) {
 	case "restored_started":
 		a.Native, a.NativeWorking = true, true
 		if a.State != NeedsInput {
-			a.State = Working
+			a.setState(Working)
 		}
 	case "started":
 		a.Native = true
 		a.NativeWorking = true
 		if a.State != NeedsInput {
-			a.State = Working
+			a.setState(Working)
 			a.tail = ""
 		}
 	case "done", "interrupted":
@@ -106,7 +115,7 @@ func (a *Activity) NativeEvent(kind string) {
 		a.NativeWorking = false
 		a.tail = ""
 		if wasActive {
-			a.State = Done
+			a.setState(Done)
 		}
 	case "unavailable":
 		if a.Native {

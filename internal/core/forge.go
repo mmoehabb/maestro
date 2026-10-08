@@ -35,9 +35,9 @@ func (r *Runtime) Workflow(ctx context.Context, task store.Task, action string, 
 		return task, err
 	}
 	defer done()
-	op, cancel := context.WithTimeout(r.ctx, 2*time.Minute)
+	op, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	stop := context.AfterFunc(ctx, cancel)
+	stop := context.AfterFunc(r.ctx, cancel)
 	defer stop()
 	task, err = r.Service.Find(op, task.Slug)
 	if err != nil {

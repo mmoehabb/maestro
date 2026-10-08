@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mmoehabb/maestro/internal/app"
+	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/version"
 )
 
@@ -46,6 +47,7 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		newLifecycleCmd("reopen"),
 		newLifecycleCmd("rm"),
 		newDoctorCmd(),
+		newAuthCmd(),
 		newConfigCmd(),
 		newThemeCmd(),
 	)
@@ -65,6 +67,9 @@ func newVersionCmd() *cobra.Command {
 
 // Execute runs the CLI and returns the process exit code.
 func Execute() int {
+	if handled, code := git.RunAskpass(os.Args[1:], os.Stdout); handled {
+		return code
+	}
 	if err := NewRootCmd(os.Stdout, os.Stderr).Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "maestro:", err)
 		return 1

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -25,10 +26,25 @@ func encodeEnhanced(k uv.Key, release bool, flags int) (string, bool) {
 	if flags == 0 {
 		return "", release
 	}
-	if !release && flags&8 == 0 && k.Mod & ^(uv.ModShift|uv.ModCapsLock|uv.ModNumLock) == 0 && k.Text != "" {
+	if flags&8 == 0 && k.Mod & ^(uv.ModShift|uv.ModCapsLock|uv.ModNumLock|uv.ModScrollLock) == 0 && k.Text != "" {
+		// Text sent as UTF-8 has no corresponding repeat/release event.
+		if release {
+			return "", true
+		}
 		return k.Text, true
 	}
 	code := k.Code
+	if code == uv.KeyExtended && k.Text != "" {
+		// Kitty uses key 0 for composed text with no physical key identity.
+		// https://sw.kovidgoyal.net/kitty/keyboard-protocol/#text-as-code-points
+		if release {
+			return "", true
+		}
+		if flags&16 == 0 {
+			return k.Text, true
+		}
+		code = 0
+	}
 	switch code {
 	case uv.KeyEscape:
 		code = 27
@@ -87,4 +103,28 @@ func encodeEnhanced(k uv.Key, release bool, flags int) (string, bool) {
 		text = ";" + strings.Join(parts, ":")
 	}
 	return "\x1b[" + keys + ";" + mods + text + "u", true
+}
+
+// NormalizeKey supplies printable text when a terminal reports only key codes.
+// Existing text remains authoritative for composed and international input.
+func NormalizeKey(k uv.Key) uv.Key {
+	if k.Mod & ^(uv.ModShift|uv.ModCapsLock|uv.ModNumLock|uv.ModScrollLock) != 0 {
+		k.Text = ""
+		return k
+	}
+	if k.Text != "" || !unicode.IsPrint(k.Code) {
+		return k
+	}
+	code := k.Code
+	if k.Mod&(uv.ModShift|uv.ModCapsLock) != 0 {
+		if k.ShiftedCode != 0 {
+			code = k.ShiftedCode
+		} else if unicode.IsLetter(code) {
+			if (k.Mod&uv.ModShift != 0) != (k.Mod&uv.ModCapsLock != 0) {
+				code = unicode.ToUpper(code)
+			}
+		}
+	}
+	k.Text = string(code)
+	return k
 }

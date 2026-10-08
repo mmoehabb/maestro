@@ -62,6 +62,37 @@ func TestPaletteRoutingAndDisabledActions(t *testing.T) {
 	}
 }
 
+func TestNoticeFitsFooter(t *testing.T) {
+	for _, width := range []int{1, 20, 40, 80, 160} {
+		for _, notice := range []string{
+			"GitHub rejected the credentials; run maestro auth login or update GH_TOKEN, GITHUB_TOKEN or github.token",
+			"GitHub login failed:\n\r\t" + strings.Repeat("認証失敗🙂 ", 40),
+			"\x1b[31mGitHub login failed\x1b[0m\n" + strings.Repeat("details ", 40),
+			"Short warning",
+		} {
+			m := testModel(t)
+			m.width, m.height = width, 24
+			m.notify(notice)
+			lines := strings.Split(ansi.Strip(m.View().Content), "\n")
+			if len(lines) != m.height {
+				t.Fatalf("width %d: notice expanded view to %d rows", width, len(lines))
+			}
+			footer := lines[m.geometry().footer]
+			if ansi.StringWidth(footer) > width || strings.ContainsAny(footer, "\r\t") {
+				t.Fatalf("width %d: footer overflow: %q", width, footer)
+			}
+			text := strings.Join(strings.Fields(ansi.Strip(notice)), " ")
+			available := max(1, width-2*m.geometry().padding)
+			if ansi.StringWidth(text) > available && !strings.HasSuffix(strings.TrimSpace(footer), "…") {
+				t.Fatalf("width %d: missing truncation indicator: %q", width, footer)
+			}
+			if ansi.StringWidth(text) <= available && strings.TrimSpace(footer) != text {
+				t.Fatalf("width %d: short notice changed: %q", width, footer)
+			}
+		}
+	}
+}
+
 func TestDiffRoutingAndStaleReplies(t *testing.T) {
 	m := testModel(t)
 	m.tabs[0].task.BaseBranch = "main"

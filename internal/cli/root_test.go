@@ -44,7 +44,7 @@ func TestHelpListsPlannedCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, c := range []string{"new", "ls", "open", "switch", "history", "push", "pr", "merge", "archive", "reopen", "rm", "doctor", "config", "theme", "completion"} {
+	for _, c := range []string{"new", "ls", "open", "switch", "history", "push", "pr", "merge", "archive", "reopen", "rm", "doctor", "auth", "config", "theme", "completion"} {
 		if !strings.Contains(out, "  "+c+" ") {
 			t.Errorf("help output missing command %q", c)
 		}

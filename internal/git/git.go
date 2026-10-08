@@ -17,11 +17,18 @@ type Repo struct{ Root, CommonDir, Remote, DefaultBranch string }
 
 func run(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	var output string
+	var err error
+	if prompt, ok := ctx.Value(credentialPromptKey{}).(CredentialPrompt); ok && len(args) > 0 && (args[0] == "push" || args[0] == "fetch" || args[0] == "ls-remote") {
+		output, err = runWithPrompt(ctx, cmd, prompt)
+	} else {
+		out, runErr := cmd.CombinedOutput()
+		output, err = string(out), runErr
 	}
-	return strings.TrimSpace(string(out)), nil
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(output))
+	}
+	return strings.TrimSpace(output), nil
 }
 
 // Discover resolves linked worktrees to the main checkout, so all tabs in the

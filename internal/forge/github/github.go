@@ -19,6 +19,16 @@ func New(token string) *Provider {
 	return &Provider{client: gh.NewClient(&http.Client{Transport: tr, Timeout: 30 * time.Second})}
 }
 
+// ResetAuth reloads credentials after an interactive login.
+func (p *Provider) ResetAuth() {
+	tr := p.client.Client().Transport.(*transport)
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	tr.token = ""
+	clear(tr.cache)
+	tr.retryAt = time.Time{}
+}
+
 func (p *Provider) CheckAuth(ctx context.Context) error {
 	_, _, err := p.client.Users.Get(ctx, "")
 	return err

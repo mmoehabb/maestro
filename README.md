@@ -87,6 +87,7 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix n` | Edit task notes (Ctrl+S saves, Esc cancels) |
 | `prefix c` | New task: title, base branch, agent and prompt |
 | `prefix d` | Hide the current tab and stop its agent |
+| `prefix g` | Sign in to GitHub |
 | `prefix p`, `prefix P`, `prefix m` | Push, create/open PR, merge PR |
 | `prefix &`, `prefix u` | Archive/clean up, reopen an archived task |
 | `prefix x`, `prefix r` | Stop, restart/resume the agent |
@@ -176,6 +177,27 @@ Missing helpers leave the in-app alerts available and report availability once.
 See [custom agent configuration](docs/CUSTOM_AGENTS.md) for complete template,
 session identity, manual prompt, handoff, and troubleshooting guidance, and
 [the P4 UX checklist](docs/P4_UX.md) for manual acceptance checks.
+
+### GitHub authentication
+
+Run `maestro auth login`, or press `prefix g` inside Maestro, to start the
+GitHub CLI's interactive login. Install `gh` first. `maestro auth status`
+checks the credentials used by PR, CI, review, and merge commands.
+
+Credential precedence is `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token`, then
+`github.token` in configuration. Unset token environment variables before
+interactive login; they override credentials stored by `gh`. After login,
+retry `prefix P` to create or open a PR. Uppercase shortcuts require Shift;
+`prefix p` pushes the branch.
+
+Git pushes use Git's credentials separately. For HTTPS remotes, use
+`gh auth setup-git` if Git still prompts for credentials; SSH remotes require
+a working SSH key.
+
+Inside Maestro, Git and SSH credential requests appear in a masked input.
+Press Enter to submit or Esc (also Ctrl+C) to cancel the operation and close
+the prompt. Passphrases retain spaces and symbols. Background cleanup never
+opens a credential prompt; retry it manually if authentication is required.
 
 ### Archive and delete tabs
 

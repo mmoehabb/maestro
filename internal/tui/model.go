@@ -63,6 +63,8 @@ type (
 )
 
 type Model struct {
+	credentials             chan credentialRequest
+	credentialUI            *credentialDialog
 	themes                  *themePicker
 	palette                 *paletteView
 	diff                    *diffView
@@ -100,7 +102,8 @@ type Model struct {
 
 func New(s *core.TaskService, r *core.Runtime, focus string) *Model {
 	return &Model{
-		service: s, runtime: r, cfg: s.Config, focus: focus, width: 80, height: 24,
+		credentials: make(chan credentialRequest, 16),
+		service:     s, runtime: r, cfg: s.Config, focus: focus, width: 80, height: 24,
 		observed: make(map[int64]term.State), attention: make(map[int64]time.Time),
 		prefix: term.ActivePrefix(s.Config.Prefix, s.Config.PrefixFallback, false),
 	}
@@ -134,6 +137,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg := msg.(type) {
+	case githubLoginMsg:
+		if msg.err != nil {
+			m.notify("GitHub login failed: " + msg.err.Error())
+		} else {
+			if provider, ok := m.service.Forge.(interface{ ResetAuth() }); ok {
+				provider.ResetAuth()
+			}
+			m.notify("GitHub login completed. Retry the GitHub command.")
+		}
 	case themeSavedMsg:
 		if m.themes == msg.picker {
 			m.themes.busy = false
@@ -173,7 +185,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case workflowMsg:
 		return m, m.workflowResult(msg)
 	case prDraftMsg:
-		if m.forgeUI == nil {
+		if m.forgeUI == nil || m.forgeUI != msg.dialog {
 			return m, nil
 		}
 		if msg.err != nil {
@@ -184,7 +196,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyTask(msg.task)
 		m.forgeUI = newPRDialog(msg.task, msg.draft, m.width, m.height)
 	case reopenListMsg:
-		if m.forgeUI == nil {
+		if m.forgeUI == nil || m.forgeUI != msg.dialog {
 			return m, nil
 		}
 		m.forgeUI.busy = false
@@ -393,12 +405,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return statusMsg{values, failure}
 			}
 		}
-		return m, tea.Batch(tick(), refresh, m.observeActivity())
+		return m, tea.Batch(tick(), refresh, m.observeActivity(), m.pollCredentials())
 	case tea.KeyPressMsg:
+		msg = tea.KeyPressMsg(term.NormalizeKey(uv.Key(msg)))
 		if m.swallowed == nil {
 			m.swallowed = make(map[rune]bool)
 		}
 		m.swallowed[msg.Code] = true
+		if m.credentialUI != nil {
+			return m, m.credentialKey(msg)
+		}
 		if m.themes != nil {
 			return m, m.themeKey(msg)
 		}
@@ -484,10 +500,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.swallowed, msg.Code)
 			return m, nil
 		}
-		if !m.prefixed && m.themes == nil && m.palette == nil && m.diff == nil && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+		if m.credentialUI == nil && !m.prefixed && m.themes == nil && m.palette == nil && m.diff == nil && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Key(uv.Key(msg), true)
 		}
 	case tea.PasteMsg:
+		if m.credentialUI != nil {
+			var cmd tea.Cmd
+			m.credentialUI.input, cmd = m.credentialUI.input.Update(msg)
+			return m, cmd
+		}
 		if m.themes != nil {
 			return m, nil
 		}
@@ -518,8 +539,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabs[m.active].pane.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
+		if m.credentialUI != nil {
+			return m, nil
+		}
 		return m, m.mouse(msg)
 
+	}
+	if m.credentialUI != nil {
+		var cmd tea.Cmd
+		m.credentialUI.input, cmd = m.credentialUI.input.Update(msg)
+		return m, cmd
 	}
 	if m.forgeUI != nil {
 		return m, m.forgeInput(msg)
@@ -647,6 +676,10 @@ func (m *Model) View() tea.View {
 		body = m.themeView(cols, rows)
 		cursor = nil
 	}
+	if m.credentialUI != nil {
+		body = m.credentialView(cols, rows)
+		cursor = nil
+	}
 	lines := strings.Split(body, "\n")
 	for len(lines) < rows {
 		lines = append(lines, "")
@@ -662,7 +695,8 @@ func (m *Model) View() tea.View {
 		footer = "Prefix: a agent · h history · n notes · e editor · c new · x stop · r resume · R fresh · t shell · z suspend · [ scroll · q quit"
 	}
 	if time.Now().Before(m.toastUntil) {
-		footer = m.toast
+		text := strings.Join(strings.Fields(ansi.Strip(m.toast)), " ")
+		footer = ansi.Truncate(text, max(1, m.width-2*m.geometry().padding), "…")
 	}
 	if m.quitting {
 		footer = "Stopping agents and saving sessions…"

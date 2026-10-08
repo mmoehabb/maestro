@@ -12,6 +12,7 @@ import (
 
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
+	"github.com/mmoehabb/maestro/internal/forge"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/store"
 	"github.com/mmoehabb/maestro/internal/term"
@@ -159,5 +160,61 @@ func TestPrefixSuspendAndShell(t *testing.T) {
 	_, cmd = m.Update(tea.KeyPressMsg{Code: 't'})
 	if cmd == nil {
 		t.Fatal("expected exec cmd for shell")
+	}
+}
+
+func TestShiftedPrefixShortcuts(t *testing.T) {
+	for _, key := range []tea.KeyPressMsg{
+		{Code: '?', Text: "?"},
+		{Code: '/', ShiftedCode: '?', Mod: tea.ModShift},
+	} {
+		m := testModel(t)
+		m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+		m.Update(key)
+		if !m.help {
+			t.Fatalf("help shortcut lost: %+v", key)
+		}
+	}
+}
+
+func TestStaleForgeResultsDoNotReplaceDialog(t *testing.T) {
+	m := testModel(t)
+	old := &forgeDialog{action: "pr"}
+	current := &forgeDialog{action: "merge", busy: true}
+	m.forgeUI = current
+	m.Update(prDraftMsg{dialog: old})
+	if m.forgeUI != current || !current.busy {
+		t.Fatal("stale PR result replaced dialog")
+	}
+	m.Update(reopenListMsg{dialog: old})
+	if m.forgeUI != current || !current.busy {
+		t.Fatal("stale reopen result changed dialog")
+	}
+}
+
+func TestShiftedCreatePRShortcut(t *testing.T) {
+	for _, key := range []tea.KeyPressMsg{
+		{Code: 'P', Text: "P"},
+		{Code: 'p', ShiftedCode: 'P', Mod: tea.ModShift},
+	} {
+		m := testModel(t)
+		m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+		_, cmd := m.Update(key)
+		if cmd == nil || m.forgeUI == nil || m.forgeUI.action != "pr" {
+			t.Fatalf("PR shortcut lost: %+v", key)
+		}
+	}
+}
+
+func TestPRTitleAcceptsPrintableKeys(t *testing.T) {
+	m := testModel(t)
+	m.forgeUI = newPRDialog(m.tabs[0].task, forge.NewPR{}, 80, 24)
+	var want strings.Builder
+	for code := rune(' '); code <= '~'; code++ {
+		m.Update(tea.KeyPressMsg{Code: code})
+		want.WriteRune(code)
+	}
+	if got := m.forgeUI.title.Value(); got != want.String() {
+		t.Fatalf("got %q, want %q", got, want.String())
 	}
 }

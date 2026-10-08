@@ -20,6 +20,7 @@
    ctrl+b s  Toggle tabs / sidebar
    ctrl+b T  Choose color theme
    ctrl+b ?  Help
+   ctrl+b g  Sign in to GitHub
    ctrl+b p  Push branch
    ctrl+b P  Create / open pull request
    ctrl+b m  Merge pull request
@@ -39,7 +40,6 @@
    Drag tasks to reorder · Mouse wheel scrolls
    Ctrl+C and Enter reach the agent outside views.
    ↑/↓ scroll · PgUp/PgDn · Esc return
-   
    
 
    ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

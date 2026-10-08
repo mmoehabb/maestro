@@ -16,9 +16,9 @@
     Toggle tabs / sidebar  [ctrl+b s]
     Choose color theme  [ctrl+b T]
     Help  [ctrl+b ?]
-    Push branch  [ctrl+b p]
+    Sign in to GitHub  [ctrl+b g]
   
-  26 matches · ↑/↓ select · Enter run · Esc cancel
+  27 matches · ↑/↓ select · Enter run · Esc cancel
   ────────────────────────────────────────────────────────────────────────────
   maestro/fix-auth                                             +0 −0 · 0 files
   alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

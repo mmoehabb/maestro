@@ -55,7 +55,18 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+	if resp.StatusCode == http.StatusUnauthorized {
+		t.mu.Lock()
+		if t.token == token {
+			t.token = ""
+			clear(t.cache)
+		}
+		t.mu.Unlock()
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("GitHub rejected the credentials; run maestro auth login or update GH_TOKEN, GITHUB_TOKEN or github.token")
+	}
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden &&
+		(resp.Header.Get("X-RateLimit-Remaining") == "0" || resp.Header.Get("Retry-After") != "") {
 		delay := time.Minute
 		if seconds, e := strconv.Atoi(resp.Header.Get("Retry-After")); e == nil {
 			delay = max(delay, time.Duration(seconds)*time.Second)

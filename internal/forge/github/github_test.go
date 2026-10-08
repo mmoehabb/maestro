@@ -133,3 +133,67 @@ func TestTokenEnvironmentPrecedence(t *testing.T) {
 		t.Fatal(source, err)
 	}
 }
+
+func TestRejectedTokenCanRecover(t *testing.T) {
+	var calls atomic.Int32
+	p := serverProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Header.Get("Authorization") != "Bearer replacement" {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"message":"Bad credentials"}`)
+			return
+		}
+		fmt.Fprint(w, `{"login":"user"}`)
+	})
+	if err := p.CheckAuth(context.Background()); err == nil || !strings.Contains(err.Error(), "maestro auth login") {
+		t.Fatalf("%v", err)
+	}
+	t.Setenv("GH_TOKEN", "replacement")
+	if err := p.CheckAuth(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 2 {
+		t.Fatal(calls.Load())
+	}
+}
+
+func TestPermissionFailureDoesNotBlockOtherRequests(t *testing.T) {
+	var calls atomic.Int32
+	p := serverProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"message":"Resource not accessible"}`)
+			return
+		}
+		fmt.Fprint(w, `{"login":"user"}`)
+	})
+	if err := p.CheckAuth(context.Background()); err == nil {
+		t.Fatal("expected permission error")
+	}
+	if err := p.CheckAuth(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResetAuthReloadsToken(t *testing.T) {
+	p := serverProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"login":%q}`, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	})
+	if err := p.CheckAuth(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GH_TOKEN", "replacement")
+	p.ResetAuth()
+	user, _, err := p.client.Users.Get(context.Background(), "")
+	if err != nil || user.GetLogin() != "replacement" {
+		t.Fatal(user, err)
+	}
+}
+
+func TestLoginRejectsOverridingEnvironment(t *testing.T) {
+	t.Setenv("GH_TOKEN", "secret-token")
+	_, err := LoginCommand(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "unset") || strings.Contains(err.Error(), "secret-token") {
+		t.Fatal(err)
+	}
+}

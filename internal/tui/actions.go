@@ -26,6 +26,7 @@ var actions = []action{
 	{"s", "Toggle tabs / sidebar", false},
 	{"T", "Choose color theme", false},
 	{"?", "Help", false},
+	{"g", "Sign in to GitHub", false},
 	{"p", "Push branch", true},
 	{"P", "Create / open pull request", true},
 	{"m", "Merge pull request", true},
@@ -117,6 +118,8 @@ func (m *Model) dispatch(key string) tea.Cmd {
 		}
 	case "z":
 		return tea.Suspend
+	case "g":
+		return m.loginGitHub()
 	case "p":
 		return m.openForge("push")
 	case "P":

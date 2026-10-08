@@ -18,6 +18,7 @@
      Toggle tabs / sidebar  [ctrl+b s]
      Choose color theme  [ctrl+b T]
      Help  [ctrl+b ?]
+     Sign in to GitHub  [ctrl+b g]
      Push branch  [ctrl+b p]
      Create / open pull request  [ctrl+b P]
      Merge pull request  [ctrl+b m]
@@ -36,8 +37,7 @@
      Task:  · add-tui · codex
      Task:  · refactor · codex
    
-   26 matches · ↑/↓ select · Enter run · Esc cancel
-   
+   27 matches · ↑/↓ select · Enter run · Esc cancel
    
    
    

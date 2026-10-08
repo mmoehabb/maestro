@@ -185,6 +185,7 @@ func (e *virtualTerminal) Mouse(m uv.Mouse, release, motion bool) {
 }
 
 func (e *virtualTerminal) Key(k uv.Key, release bool) {
+	k = NormalizeKey(k)
 	if seq, handled := encodeEnhanced(k, release, e.flags); handled {
 		_, _ = io.WriteString(e.vt.InputPipe(), seq)
 		return
@@ -197,6 +198,15 @@ func (e *virtualTerminal) Key(k uv.Key, release bool) {
 	if k.Text != "" && k.Mod & ^(uv.ModShift|uv.ModCapsLock|uv.ModNumLock) == 0 {
 		e.vt.SendText(k.Text)
 		return
+	}
+	if k.Mod&uv.ModAlt != 0 {
+		plain := k
+		plain.Mod &^= uv.ModAlt
+		plain = NormalizeKey(plain)
+		if plain.Text != "" {
+			_, _ = io.WriteString(e.vt.InputPipe(), "\x1b"+plain.Text)
+			return
+		}
 	}
 	k.Text = ""
 	k.IsRepeat = false

@@ -17,6 +17,8 @@ import (
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
 	"github.com/mmoehabb/maestro/internal/forge"
+	"github.com/mmoehabb/maestro/internal/forge/github"
+	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/store"
 )
 
@@ -39,13 +41,15 @@ type workflowMsg struct {
 	dialog *forgeDialog
 }
 type prDraftMsg struct {
-	task  store.Task
-	draft forge.NewPR
-	err   error
+	dialog *forgeDialog
+	task   store.Task
+	draft  forge.NewPR
+	err    error
 }
 type reopenListMsg struct {
-	tasks []store.Task
-	err   error
+	dialog *forgeDialog
+	tasks  []store.Task
+	err    error
 }
 type browserMsg struct{ err error }
 
@@ -68,7 +72,8 @@ func (m *Model) workflow(task store.Task, action string, opts core.WorkflowOptio
 		dialog = nil
 	}
 	return func() tea.Msg {
-		result, err := m.runtime.Workflow(context.Background(), task, action, opts)
+		ctx := git.WithCredentialPrompt(context.Background(), m.promptCredentials)
+		result, err := m.runtime.Workflow(ctx, task, action, opts)
 		return workflowMsg{task: result, action: action, err: err, dialog: dialog}
 	}
 }
@@ -76,9 +81,10 @@ func (m *Model) workflow(task store.Task, action string, opts core.WorkflowOptio
 func (m *Model) openForge(action string) tea.Cmd {
 	if action == "reopen" {
 		m.forgeUI = &forgeDialog{action: "reopen", busy: true}
+		dialog := m.forgeUI
 		return func() tea.Msg {
 			tasks, err := m.service.List(context.Background(), true)
-			return reopenListMsg{tasks, err}
+			return reopenListMsg{dialog: dialog, tasks: tasks, err: err}
 		}
 	}
 	if len(m.tabs) == 0 || m.tabs[m.active].pending {
@@ -94,23 +100,24 @@ func (m *Model) openForge(action string) tea.Cmd {
 	}
 	switch action {
 	case "pr":
+		dialog := m.forgeUI
 		m.forgeUI.busy = true
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			current, err := m.runtime.Workflow(ctx, task, "refresh", core.WorkflowOptions{})
 			if err != nil {
-				return prDraftMsg{task: task, err: err}
+				return prDraftMsg{dialog: dialog, task: task, err: err}
 			}
 			if current.PRNumber != 0 {
-				return prDraftMsg{task: current}
+				return prDraftMsg{dialog: dialog, task: current}
 			}
 			draft, err := m.service.PRDescription(ctx, current, "")
 			// Commit-only bases are editable in the dialog.
 			if err != nil && strings.Contains(err.Error(), "specify the PR base") {
 				draft, err = m.service.PRDescription(ctx, current, strings.TrimPrefix(m.service.Repo.DefaultBranch, "origin/"))
 			}
-			return prDraftMsg{current, draft, err}
+			return prDraftMsg{dialog: dialog, task: current, draft: draft, err: err}
 		}
 	case "merge":
 		m.forgeUI.busy = true
@@ -429,4 +436,15 @@ func (m *Model) queueCleanup(task store.Task) {
 		}
 	}
 	m.cleanupQueue = append(m.cleanupQueue, task)
+}
+
+type githubLoginMsg struct{ err error }
+
+func (m *Model) loginGitHub() tea.Cmd {
+	cmd, err := github.LoginCommand(context.Background())
+	if err != nil {
+		m.notify(err.Error())
+		return nil
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg { return githubLoginMsg{err} })
 }

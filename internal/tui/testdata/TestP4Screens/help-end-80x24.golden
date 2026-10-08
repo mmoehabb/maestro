@@ -1,0 +1,24 @@
+  ♪  maestro / repo                                                 3 sessions
+
+     ⠋ fix-auth  codex    │   ✓ add-tui  codex    │    ⚑ refactor  codex     │
+  ────────────────────────────────────────────────────────────────────────────
+  CODEX / fix-auth                                                   ⠋ Working
+
+  ctrl+b u  Reopen archived task
+  ctrl+b d  Hide tab (preserve worktree)
+  ctrl+b x  Stop agent
+  ctrl+b r  Restart / resume agent
+  ctrl+b R  Start a fresh session
+  ctrl+b [  Scroll / copy terminal history
+  ctrl+b e  Open editor
+  ctrl+b t  Open shell in worktree
+  ctrl+b z  Suspend Maestro
+  ctrl+b q  Quit and save sessions
+  
+  ctrl+b ctrl+b  Send prefix to agent
+  Drag tasks to reorder · Mouse wheel scrolls
+  Ctrl+C and Enter reach the agent outside views.
+  ↑/↓ scroll · PgUp/PgDn · Esc return
+  ────────────────────────────────────────────────────────────────────────────
+  maestro/fix-auth                                             +0 −0 · 0 files
+  alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

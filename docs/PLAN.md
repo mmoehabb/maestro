@@ -391,7 +391,7 @@ The active tab is highlighted with a rounded underline, inactive tabs are dimmed
 - **Switch agent** (`prefix a`): agent list showing which agents have previously worked on this task.
 - **Command palette** (`prefix :`): fuzzy search over every action and task.
 - **History** (`prefix h`): the task timeline (events + agent sessions); expand any session to read its turns.
-- **Diff** (`prefix d`): syntax-highlighted `git diff` against the base branch.
+- **Diff** (`prefix D`; `prefix d` hides a tab): syntax-highlighted `git diff` against the base branch.
 - **Help** (`prefix ?`): all keybindings, grouped.
 - **Toasts** in the bottom-right for async events (agent done, PR merged, CI failed, agent exited).
 
@@ -437,7 +437,7 @@ maestro completion <shell>
 
 ### Implementation status
 
-P0, P1, P2, and the P3 implementation are delivered. Authenticated live GitHub acceptance remains a manual check. P1 includes:
+P0–P4 implementations are delivered. Authenticated live GitHub acceptance and native macOS/Windows P4 terminal and desktop-notification acceptance remain manual checks. P1 includes:
 
 - Layered TOML defaults/global/repo configuration, validation, and per-task CLI overrides.
 - SQLite migration with WAL and foreign keys; project/task/session persistence, atomic creation/start events, exit status and terminal fallback history.
@@ -485,6 +485,16 @@ recovery across database reopening, and notes persistence, locking, handoff incl
 and editor snapshots. Pane input is queued separately from PTY writes; a 16 MiB
 pending-input limit reports an error and requires restarting the agent instead of
 blocking the UI or growing memory without a bound.
+
+P4 implementation includes:
+
+- A shared action registry, fuzzy command/task palette (`prefix :`), and scrollable help.
+- An asynchronous, bounded diff view (`prefix D`) comparing the base with the tracked working tree, with diff syntax colors, untracked/binary indicators, refresh, and scrolling. The shipped `prefix d` archive shortcut is preserved.
+- Sidebar layout (`prefix s`) with narrow-terminal fallback, shared pane/cursor/mouse geometry, and drag ordering persisted transactionally using the existing `tab_order` column.
+- Four built-in themes (Forest, Paper, Catppuccin, Tokyo Night), automatic terminal background detection, validated custom palettes, `maestro theme [name] [--local]`, and a live-preview picker (`prefix T`) with save/cancel. Theme updates preserve config comments and unrelated settings.
+- Best-effort Linux/macOS/Windows desktop notifications respecting `activity.notify_on`, focus, state transitions, and stale-pane filtering, with in-app alerts and attention highlights.
+- Custom-agent configuration guidance and a [manual UX checklist](P4_UX.md). Native desktop notification delivery and cross-platform terminal UX remain manual acceptance checks.
+- Teatest/v2 screen goldens at both planned sizes, alongside regression coverage for palette input, diff replies, ordering persistence, themes, and notification deduplication. The Linux PTY smoke test covers three agents, palette selection, diff, sidebar, mouse drag, persisted order, resize, prompt forwarding, scrollable help, quit, and resume with unchanged native session IDs.
 
 ```mermaid
 flowchart LR

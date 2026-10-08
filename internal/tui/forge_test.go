@@ -50,7 +50,7 @@ func TestForgeSnapshots(t *testing.T) {
 			}
 			got := ansi.Strip(m.View().Content) + "\n"
 			name := filepath.Join("testdata", "forge-"+screen+"-"+size.name+".golden")
-			if *update {
+			if updateGolden() {
 				if err := os.WriteFile(name, []byte(got), 0o644); err != nil {
 					t.Fatal(err)
 				}

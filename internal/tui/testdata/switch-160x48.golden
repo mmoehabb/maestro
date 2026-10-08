@@ -1,48 +1,48 @@
- ♪ maestro /repo
- ⠋ fix-auth · codex  ✓ add-tui · codex  ⚑ refactor · codex 
-Switch agent · fix-auth
 
-› agy · installed
-  codex · current · previously used
-  opencode · not installed
+   ♪  maestro / repo                                                                                                                               3 sessions
 
-↑/↓ select · Enter switch · Esc cancel
+                   ⠋ fix-auth  codex                 │                ✓ add-tui  codex                 │                 ⚑ refactor  codex                  │
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+   CODEX / fix-auth                                                                                                                                 ⠋ Working
 
+   Switch agent · fix-auth
+   
+   › agy · installed
+     codex · current · previously used
+     opencode · not installed
+   
+   ↑/↓ select · Enter switch · Esc cancel
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
 
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   maestro/fix-auth                                                                                                                           +0 −0 · 0 files
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- codex · maestro/fix-auth · +0 −0 · 0 files · ↑0 ↓0 · active
-ctrl+b ? help · ctrl+b c new · ctrl+b q quit
+   alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help   ctrl+b : actions                                                                               

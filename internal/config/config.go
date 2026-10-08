@@ -28,12 +28,13 @@ type Agent struct {
 }
 
 type Config struct {
-	Prefix         string `toml:"prefix"`
-	PrefixFallback string `toml:"prefix_fallback"`
-	Icons          string `toml:"icons"`
-	Theme          string `toml:"theme"`
-	DefaultAgent   string `toml:"default_agent"`
-	Editor         string `toml:"editor"`
+	Prefix         string             `toml:"prefix"`
+	PrefixFallback string             `toml:"prefix_fallback"`
+	Icons          string             `toml:"icons"`
+	Theme          string             `toml:"theme"`
+	Themes         map[string]Palette `toml:"themes"`
+	DefaultAgent   string             `toml:"default_agent"`
+	Editor         string             `toml:"editor"`
 	Activity       struct {
 		IdleAfter string   `toml:"idle_after"`
 		NotifyOn  []string `toml:"notify_on"`
@@ -118,6 +119,9 @@ func merge(dst, src map[string]any) {
 }
 
 func (c Config) Validate() error {
+	if err := c.validatePresentation(); err != nil {
+		return err
+	}
 	if c.Handoff.TokenBudget <= 0 {
 		return fmt.Errorf("handoff.token_budget must be positive")
 	}

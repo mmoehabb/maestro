@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -12,6 +11,8 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/mmoehabb/maestro/internal/notify"
 
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
@@ -62,6 +63,20 @@ type (
 )
 
 type Model struct {
+	themes                  *themePicker
+	palette                 *paletteView
+	diff                    *diffView
+	sidebar, light, blurred bool
+	backgroundKnown         bool
+	helpOffset              int
+	dragID                  int64
+	dragMoved               bool
+	orderPending            bool
+	notifier                notify.Notifier
+	notificationFailed      bool
+	observed                map[int64]term.State
+	attention               map[int64]time.Time
+
 	forgeUI                                                   *forgeDialog
 	cleanupQueue                                              []store.Task
 	initialAgent, manualInstruction                           string
@@ -80,13 +95,13 @@ type Model struct {
 	toastUntil                                                time.Time
 	nextStatus                                                time.Time
 	statusPending                                             bool
-	tabOffsets                                                []int
 	swallowed                                                 map[rune]bool
 }
 
 func New(s *core.TaskService, r *core.Runtime, focus string) *Model {
 	return &Model{
 		service: s, runtime: r, cfg: s.Config, focus: focus, width: 80, height: 24,
+		observed: make(map[int64]term.State), attention: make(map[int64]time.Time),
 		prefix: term.ActivePrefix(s.Config.Prefix, s.Config.PrefixFallback, false),
 	}
 }
@@ -94,14 +109,14 @@ func New(s *core.TaskService, r *core.Runtime, focus string) *Model {
 func tick() tea.Cmd             { return tea.Tick(time.Second/30, func(t time.Time) tea.Msg { return tickMsg(t) }) }
 func (m *Model) event() tea.Cmd { return func() tea.Msg { return <-m.runtime.Events } }
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(tick(), m.event(), tea.Tick(600*time.Millisecond, func(time.Time) tea.Msg { return prefixTimeoutMsg{} }), func() tea.Msg {
+	return tea.Batch(tea.RequestBackgroundColor, tick(), m.event(), tea.Tick(600*time.Millisecond, func(time.Time) tea.Msg { return prefixTimeoutMsg{} }), func() tea.Msg {
 		tasks, err := m.service.List(context.Background(), false)
 		return loadedMsg{tasks, err}
 	})
 }
 
 func (m *Model) notify(s string)  { m.toast = s; m.toastUntil = time.Now().Add(6 * time.Second) }
-func (m *Model) size() (int, int) { return max(1, m.width), max(1, m.height-4) }
+func (m *Model) size() (int, int) { b := m.paneBounds(); return b.w, b.h }
 func (m *Model) launch(index int, fresh bool) tea.Cmd {
 	t := &m.tabs[index]
 	if t.pending {
@@ -119,6 +134,42 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg := msg.(type) {
+	case themeSavedMsg:
+		if m.themes == msg.picker {
+			m.themes.busy = false
+			if msg.err != nil {
+				m.themes.err = msg.err.Error()
+			} else {
+				m.themes = nil
+				m.notify("Theme saved: " + m.cfg.Theme)
+			}
+		}
+	case tea.BackgroundColorMsg:
+		m.light = !msg.IsDark()
+		m.backgroundKnown = true
+	case tea.FocusMsg:
+		m.blurred = false
+	case tea.BlurMsg:
+		m.blurred = true
+	case notificationMsg:
+		if msg.err != nil && !m.notificationFailed {
+			m.notificationFailed = true
+			m.notify("Desktop notifications unavailable; alerts remain in Maestro.")
+		}
+	case diffMsg:
+		if m.diff == msg.view {
+			m.diff.loading = false
+			m.diff.result = msg.result
+			m.diff.lines = nil
+			m.diff.err = msg.err
+		}
+	case orderedMsg:
+		m.orderPending = false
+		if msg.err != nil {
+			m.notify("Could not reorder tasks: " + msg.err.Error())
+		} else {
+			m.applyOrder(msg.ids)
+		}
 	case workflowMsg:
 		return m, m.workflowResult(msg)
 	case prDraftMsg:
@@ -153,28 +204,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case notesSavedMsg:
 		m.notesSaved(msg)
 	case tea.WindowSizeMsg:
+		m.dragID = 0
+		m.dragMoved = false
 		m.width, m.height = msg.Width, msg.Height
-		if m.forgeUI != nil && m.forgeUI.action == "pr" && !m.forgeUI.busy {
-			m.forgeUI.body.SetWidth(max(1, m.width-2))
-			m.forgeUI.body.SetHeight(max(1, m.height-13))
-		}
-		if m.notes != nil {
-			m.notes.input.SetWidth(max(1, m.width-2))
-			m.notes.input.SetHeight(max(1, m.height-9))
-		}
-		cols, rows := m.size()
-		for i := range m.tabs {
-			if m.tabs[i].pane != nil {
-				if err := m.tabs[i].pane.Resize(cols, rows); err != nil {
-					m.notify(err.Error())
-				}
-			}
-		}
+		m.styleInputs()
+		m.resizePanes()
 	case tea.KeyboardEnhancementsMsg:
 		m.enhanced = msg.SupportsKeyDisambiguation()
 		m.prefix = term.ActivePrefix(m.cfg.Prefix, m.cfg.PrefixFallback, m.enhanced)
 		m.prefixSettled = true
 	case prefixTimeoutMsg:
+		m.backgroundKnown = true
 		if !m.prefixSettled && m.prefix != m.cfg.Prefix {
 			m.notify("Keyboard disambiguation unavailable; prefix is " + m.prefix + ". Enter goes to the agent.")
 		}
@@ -193,6 +233,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		for _, task := range msg.tasks {
 			m.tabs = append(m.tabs, tab{task: task, state: term.Starting})
+			m.observed[task.ID] = term.Starting
 			if task.Slug == m.focus {
 				m.active = len(m.tabs) - 1
 			}
@@ -240,6 +281,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.dialog = nil
 		m.tabs = append(m.tabs, tab{task: msg.task, state: term.Starting})
+		m.observed[msg.task.ID] = term.Starting
 		m.active = len(m.tabs) - 1
 		return m, m.launch(m.active, false)
 	case archivedMsg:
@@ -286,15 +328,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i := range m.tabs {
 			if m.tabs[i].task.ID == msg.TaskID && msg.State != "" && (msg.Pane == nil || msg.Pane == m.tabs[i].pane) {
 				m.tabs[i].state = msg.State
-				if i != m.active && (msg.State == term.Done || msg.State == term.NeedsInput) {
-					m.notify(m.tabs[i].task.Slug + ": " + string(msg.State))
-				}
+
 				if msg.State == term.Done {
 					m.nextStatus = time.Time{}
 				}
 			}
 		}
-		return m, m.event()
+		return m, tea.Batch(m.event(), m.observeActivity())
 	case statusMsg:
 		m.statusPending = false
 		for i := range m.tabs {
@@ -306,7 +346,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notify("Git status: " + msg.err.Error())
 		}
 	case tickMsg:
-		if len(m.cleanupQueue) > 0 && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help {
+		if len(m.cleanupQueue) > 0 && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && m.palette == nil && m.diff == nil && m.themes == nil && !m.help {
 			task := m.cleanupQueue[0]
 			consume := true
 			for _, t := range m.tabs {
@@ -353,12 +393,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return statusMsg{values, failure}
 			}
 		}
-		return m, tea.Batch(tick(), refresh)
+		return m, tea.Batch(tick(), refresh, m.observeActivity())
 	case tea.KeyPressMsg:
 		if m.swallowed == nil {
 			m.swallowed = make(map[rune]bool)
 		}
 		m.swallowed[msg.Code] = true
+		if m.themes != nil {
+			return m, m.themeKey(msg)
+		}
+		if m.palette != nil {
+			return m, m.paletteKey(msg)
+		}
+		if m.diff != nil {
+			return m, m.diffKey(msg)
+		}
 		if m.forgeUI != nil {
 			return m, m.forgeKey(msg)
 		}
@@ -375,7 +424,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.dialogKey(msg)
 		}
 		if m.help {
-			m.help = false
+			m.helpKey(msg)
 			return m, nil
 		}
 		if m.scroll > 0 {
@@ -387,9 +436,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "j", "down":
 				m.scroll = max(0, m.scroll-1)
 			case "pgup":
-				m.scroll += m.height - 4
+				_, rows := m.size()
+				m.scroll += rows
 			case "pgdown":
-				m.scroll = max(0, m.scroll-m.height+4)
+				_, rows := m.size()
+				m.scroll = max(0, m.scroll-rows)
 			case "y":
 				if len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 					text := strings.Join(m.tabs[m.active].pane.Scrollback(), "\n")
@@ -406,77 +457,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.forwardKey(msg, false)
 				return m, nil
 			}
-			switch key {
-			case "q":
-				m.quitting = true
-				return m, tea.Quit
-			case "c":
-				m.dialog = newDialog(m.cfg, m.service.Repo.DefaultBranch)
-			case "a":
-				return m, m.openSwitch()
-			case "h":
-				return m, m.openHistory()
-			case "n":
-				return m, m.openNotes()
-			case "H":
-				if m.manualInstruction != "" {
-					return m, tea.SetClipboard(m.manualInstruction)
-				}
-			case "?":
-				m.help = true
-			case "[":
-				m.scroll = 1
-			case "r", "R":
-				if len(m.tabs) > 0 {
-					return m, m.launch(m.active, key == "R")
-				}
-			case "t":
-				if len(m.tabs) > 0 {
-					shell := os.Getenv("SHELL")
-					if shell == "" {
-						shell = os.Getenv("COMSPEC")
-					}
-					if shell == "" {
-						shell = "sh"
-					}
-					cmd := exec.Command(shell)
-					cmd.Dir = m.tabs[m.active].task.Worktree
-					return m, tea.ExecProcess(cmd, func(err error) tea.Msg { return shellMsg{err} })
-				}
-			case "z":
-				return m, tea.Suspend
-			case "p":
-				return m, m.openForge("push")
-			case "P":
-				return m, m.openForge("pr")
-			case "m":
-				return m, m.openForge("merge")
-			case "&":
-				return m, m.openForge("cleanup")
-			case "u":
-				return m, m.openForge("reopen")
-			case "d":
-				if len(m.tabs) > 0 && !m.tabs[m.active].pending {
-					t := &m.tabs[m.active]
-					t.pending = true
-					task := t.task
-					return m, func() tea.Msg { return archivedMsg{task.ID, m.runtime.Archive(context.Background(), task)} }
-				}
-			case "x":
-				if len(m.tabs) > 0 && !m.tabs[m.active].pending {
-					t := &m.tabs[m.active]
-					t.pending = true
-					id := t.task.ID
-					return m, func() tea.Msg { m.runtime.Stop(id); return stoppedMsg{id} }
-				}
-			case "e":
-				if len(m.tabs) > 0 {
-					return m, m.openEditor(m.tabs[m.active].task.Worktree)
-				}
-			default:
-				m.notify("Unknown shortcut; " + m.prefix + " ? for help")
-			}
-			return m, nil
+			return m, m.dispatch(key)
 		}
 		if key == m.prefix {
 			m.prefixed = true
@@ -503,10 +484,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.swallowed, msg.Code)
 			return m, nil
 		}
-		if !m.prefixed && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+		if !m.prefixed && m.themes == nil && m.palette == nil && m.diff == nil && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Key(uv.Key(msg), true)
 		}
 	case tea.PasteMsg:
+		if m.themes != nil {
+			return m, nil
+		}
+		if m.palette != nil {
+			return m, m.palettePaste(msg)
+		}
+		if m.diff != nil {
+			return m, nil
+		}
 		if m.forgeUI != nil {
 			return m, m.forgeInput(msg)
 		}
@@ -528,40 +518,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabs[m.active].pane.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
-		if m.forgeUI != nil || m.notes != nil || m.dialog != nil || m.switcher != nil || m.history != nil || m.help {
-			return m, nil
-		}
-		mouse := msg.Mouse()
-		if mouse.Y == 1 {
-			if _, ok := msg.(tea.MouseClickMsg); ok {
-				for i, offset := range m.tabOffsets {
-					if mouse.X >= offset {
-						m.selectTab(i)
-					}
-				}
-			}
-			return m, nil
-		}
-		if mouse.Y >= 2 && mouse.Y < m.height-2 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
-			pane := m.tabs[m.active].pane
-			if mouse.Button == tea.MouseWheelUp || mouse.Button == tea.MouseWheelDown {
-				state := pane.Snapshot(false)
-				if m.scroll > 0 || !state.MouseReporting || state.State == term.Exited || state.State == term.Crashed {
-					if mouse.Button == tea.MouseWheelUp {
-						m.scroll += 3
-					} else {
-						m.scroll = max(0, m.scroll-3)
-					}
-					return m, nil
-				}
-			}
-			if m.scroll == 0 {
-				mouse.Y -= 2
-				_, release := msg.(tea.MouseReleaseMsg)
-				_, motion := msg.(tea.MouseMotionMsg)
-				pane.Mouse(uv.Mouse(mouse), release, motion)
-			}
-		}
+		return m, m.mouse(msg)
+
 	}
 	if m.forgeUI != nil {
 		return m, m.forgeInput(msg)
@@ -578,6 +536,7 @@ func (m *Model) selectTab(i int) {
 	if len(m.tabs) > 0 {
 		m.active = (i + len(m.tabs)) % len(m.tabs)
 		m.scroll = 0
+		delete(m.attention, m.tabs[m.active].task.ID)
 	}
 }
 
@@ -587,11 +546,6 @@ func (m *Model) forwardKey(msg tea.KeyPressMsg, release bool) {
 		m.tabs[m.active].pane.Key(uv.Key(msg), release)
 	}
 }
-
-var (
-	accent = lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa"))
-	muted  = lipgloss.NewStyle().Foreground(lipgloss.Color("#9399b2"))
-)
 
 func icon(s term.State, frame int, mode string) string {
 	if mode == "ascii" {
@@ -628,61 +582,20 @@ func icon(s term.State, frame int, mode string) string {
 
 func fit(s string, width int) string { return ansi.Truncate(s, max(1, width), "") }
 func (m *Model) View() tea.View {
+	m.styleInputs()
 	cols, rows := m.size()
-	header := accent.Render(" ♪ maestro ") + muted.Render(m.service.Repo.Root)
-	var tabs strings.Builder
-	m.tabOffsets = nil
-	// Keep the active tab visible; overflow is indicated instead of wrapping.
-	start := 0
-	labels := make([]string, len(m.tabs))
-	total := 0
-	for i, t := range m.tabs {
-		labels[i] = fmt.Sprintf(" %s %s%s · %s ", icon(t.state, m.frame, m.cfg.Icons), lifecycleBadge(t.task, m.cfg.Icons), t.task.Slug, t.task.Agent)
-		total += ansi.StringWidth(labels[i])
-		if i == m.active {
-			for total > cols-4 && start < i {
-				total -= ansi.StringWidth(labels[start])
-				start++
-			}
-		}
-	}
-	if start > 0 {
-		tabs.WriteString("‹ ")
-	}
-	for i := 0; i < len(m.tabs); i++ {
-		if i < start {
-			m.tabOffsets = append(m.tabOffsets, -100000)
-			continue
-		}
-		offset := ansi.StringWidth(tabs.String())
-		if offset+ansi.StringWidth(labels[i]) > cols-2 && i > m.active {
-			tabs.WriteString(" ›")
-			break
-		}
-		m.tabOffsets = append(m.tabOffsets, offset)
-		label := labels[i]
-		if i == m.active {
-			label = accent.Bold(true).Underline(true).Render(label)
-		} else {
-			label = muted.Render(label)
-		}
-		tabs.WriteString(label)
-	}
 	body := "No tasks yet. " + m.prefix + " c creates a task."
-	status := ""
 	var cursor *tea.Cursor
 	if len(m.tabs) > 0 {
 		t := m.tabs[m.active]
-		status = fmt.Sprintf(" %s · %s · +%d −%d · %d files · ↑%d ↓%d · %s", t.task.Agent, t.task.Branch, t.status.Added, t.status.Deleted, t.status.Dirty, t.status.Ahead, t.status.Behind, t.task.Lifecycle)
-		if t.task.PRNumber != 0 {
-			status += fmt.Sprintf(" · #%d · CI %s · review %s", t.task.PRNumber, t.task.CIState, t.task.ReviewState)
-		}
+
 		switch {
 		case t.pane != nil:
 			s := t.pane.Snapshot(true)
 			body = s.Screen
 			if s.CursorVisible && s.State != term.Exited && s.State != term.Crashed {
-				cursor = tea.NewCursor(s.X, s.Y+2)
+				bounds := m.paneBounds()
+				cursor = tea.NewCursor(s.X+bounds.x, s.Y+bounds.y)
 			}
 		case t.err != nil:
 			body = "Could not start " + t.task.Agent + ":\n" + t.err.Error() + "\n\n" + m.prefix + " r retry/resume · " + m.prefix + " R fresh session"
@@ -694,16 +607,16 @@ func (m *Model) View() tea.View {
 			end := max(0, len(lines)-m.scroll)
 			begin := max(0, end-rows)
 			body = strings.Join(lines[begin:end], "\n")
-			status = " Scroll: j/k or arrows · PgUp/PgDn · y copy history · q return"
 			cursor = nil
 		}
 	}
 	if m.help {
-		body = "Maestro shortcuts\n\nalt+1…9  switch tab    alt+h/l  previous/next\n\n" + m.prefix + " c  new task\n" + m.prefix + " e  open default editor\n" + m.prefix + " a  switch agent\n" + m.prefix + " h  task history\n" + m.prefix + " n  edit task notes\n" + m.prefix + " H  copy manual handoff instruction\n" + m.prefix + " d  hide tab (preserve worktree)\n" + m.prefix + " p  push branch\n" + m.prefix + " P  create/open PR\n" + m.prefix + " m  merge PR\n" + m.prefix + " &  archive/cleanup\n" + m.prefix + " u  reopen archived task\n" + m.prefix + " x  stop agent\n" + m.prefix + " r  restart/resume\n" + m.prefix + " R  explicitly start a fresh session\n" + m.prefix + " [  scroll/copy history\n" + m.prefix + " q  quit and stop all agents\n" + m.prefix + " t  open shell in task directory\n" + m.prefix + " z  suspend maestro\n" + m.prefix + " " + m.prefix + "  send prefix to agent\n\nAny key closes help. Ctrl+C is forwarded to the agent."
+		body = m.helpView(cols, rows)
 		cursor = nil
 	}
+
 	if m.dialog != nil {
-		body = m.dialog.View(cols, rows)
+		body = m.dialog.view(cols, rows, m.paletteColors())
 		cursor = nil
 	}
 	if m.switcher != nil {
@@ -722,6 +635,18 @@ func (m *Model) View() tea.View {
 		body = m.forgeUI.View(m.cfg.Git.MergeMethod, rows)
 		cursor = nil
 	}
+	if m.diff != nil {
+		body = m.diff.view(cols, rows, m.paletteColors())
+		cursor = nil
+	}
+	if m.palette != nil {
+		body = m.paletteView(cols, rows)
+		cursor = nil
+	}
+	if m.themes != nil {
+		body = m.themeView(cols, rows)
+		cursor = nil
+	}
 	lines := strings.Split(body, "\n")
 	for len(lines) < rows {
 		lines = append(lines, "")
@@ -732,7 +657,7 @@ func (m *Model) View() tea.View {
 	for i := range lines {
 		lines[i] = fit(lines[i], cols)
 	}
-	footer := m.prefix + " ? help · " + m.prefix + " c new · " + m.prefix + " q quit"
+	footer := m.shellFooter(m.width - 2*m.geometry().padding)
 	if m.prefixed {
 		footer = "Prefix: a agent · h history · n notes · e editor · c new · x stop · r resume · R fresh · t shell · z suspend · [ scroll · q quit"
 	}
@@ -742,7 +667,13 @@ func (m *Model) View() tea.View {
 	if m.quitting {
 		footer = "Stopping agents and saving sessions…"
 	}
-	v := tea.NewView(strings.Join([]string{fit(header, cols), fit(tabs.String(), cols), strings.Join(lines, "\n"), fit(muted.Render(status), cols), fit(footer, cols)}, "\n"))
+	v := tea.NewView(m.composeShell(lines, footer))
+	// Auto must query the terminal's original background before changing it.
+	if m.cfg.Theme != "auto" || m.backgroundKnown {
+		v.BackgroundColor = lipgloss.Color(m.paletteColors().Background)
+		v.ForegroundColor = lipgloss.Color(m.paletteColors().Foreground)
+	}
+	v.ReportFocus = true
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	v.Cursor = cursor

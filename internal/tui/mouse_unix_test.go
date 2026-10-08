@@ -47,6 +47,11 @@ func TestMouseAgentProcess(t *testing.T) {
 }
 
 func TestMouseWheelRouting(t *testing.T) {
+	t.Run("tabs", func(t *testing.T) { testMouseWheelRouting(t, false) })
+	t.Run("sidebar", func(t *testing.T) { testMouseWheelRouting(t, true) })
+}
+
+func testMouseWheelRouting(t *testing.T, sidebar bool) {
 	path := filepath.Join(t.TempDir(), "mouse-input")
 	exe, err := os.Executable()
 	if err != nil {
@@ -76,7 +81,18 @@ func TestMouseWheelRouting(t *testing.T) {
 	m := testModel(t)
 	m.width, m.height = 80, 24
 	m.tabs[0].pane = p
-	wheel := func(button tea.MouseButton) { _, _ = m.Update(tea.MouseWheelMsg{X: 4, Y: 5, Button: button}) }
+	if sidebar {
+		m.dispatch("s")
+	}
+	bounds := m.paneBounds()
+	snapshot := p.Snapshot(true)
+	view := m.View()
+	if snapshot.CursorVisible && (view.Cursor == nil || view.Cursor.X != snapshot.X+bounds.x || view.Cursor.Y != snapshot.Y+bounds.y) {
+		t.Fatal("cursor not translated into pane bounds")
+	}
+	wheel := func(button tea.MouseButton) {
+		_, _ = m.Update(tea.MouseWheelMsg{X: bounds.x + 4, Y: bounds.y + 3, Button: button})
+	}
 	wheel(tea.MouseWheelDown)
 	wheel(tea.MouseWheelUp)
 	if m.scroll != 0 {

@@ -139,8 +139,14 @@ func (m *Model) submitTask() tea.Cmd {
 }
 
 func (d *newTaskDialog) View(width, height int) string {
+	return d.view(width, height, resolvePalette(config.Config{Theme: "dark"}, false))
+}
+
+func (d *newTaskDialog) view(width, height int, p config.Palette) string {
+	accent := colored(p.Accent)
 	for i := range d.fields {
-		d.fields[i].SetWidth(max(8, min(56, width-12)))
+		d.fields[i].SetWidth(max(1, min(56, width-12)))
+		d.fields[i].SetStyles(inputStyles(p))
 	}
 	picker := fmt.Sprintf("‹ %s ›  %s", d.agents[d.selected], d.detected[d.selected])
 	if d.field == 2 {
@@ -156,6 +162,6 @@ func (d *newTaskDialog) View(width, height int) string {
 	if width < 55 || height < 18 {
 		return text
 	}
-	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#89b4fa")).Padding(1, 2).Render(text)
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(p.Accent)).Padding(1, 2).Render(text)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }

@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
 	"github.com/mmoehabb/maestro/internal/forge"
 	"github.com/mmoehabb/maestro/internal/store"
@@ -370,46 +371,46 @@ func openBrowser(raw string) tea.Cmd {
 	}
 }
 
-func lifecycleBadge(task store.Task, mode string) string {
-	label, color := "", "#9399b2"
+func lifecycleBadgeWithPalette(task store.Task, mode string, p config.Palette) string {
+	label, color := "", p.Muted
 	switch task.Lifecycle {
 	case "pushed":
 		label = "↑"
-		color = "#89b4fa"
+		color = p.Accent
 		if mode == "ascii" {
 			label = "^"
 		}
 	case "pr_open":
 		label = fmt.Sprintf("#%d", task.PRNumber)
-		color = "#89b4fa"
+		color = p.Accent
 	case "merged":
 		label = "⊕"
-		color = "#cba6f7"
+		color = p.Merged
 		if mode == "ascii" {
 			label = "M"
 		}
 	case "closed":
 		label = "✕"
-		color = "#f38ba8"
+		color = p.Error
 		if mode == "ascii" {
 			label = "C"
 		}
 	}
 	if task.ReviewState == "changes_requested" && task.PRState == "open" {
 		label += "!"
-		color = "#fab387"
+		color = p.Warning
 	}
 	if label == "" {
 		return ""
 	}
 	if task.PRState == "open" && task.CIState != "" && task.CIState != "none" {
-		mark, ciColor := "·", "#f9e2af"
+		mark, ciColor := "·", p.Warning
 		switch task.CIState {
 		case "success":
-			ciColor = "#a6e3a1"
+			ciColor = p.Success
 			mark = "+"
 		case "failure":
-			ciColor = "#f38ba8"
+			ciColor = p.Error
 			mark = "!"
 		}
 		label = lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(label) + lipgloss.NewStyle().Foreground(lipgloss.Color(ciColor)).Render(mark)

@@ -47,6 +47,7 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		newLifecycleCmd("rm"),
 		newDoctorCmd(),
 		newConfigCmd(),
+		newThemeCmd(),
 	)
 	return root
 }

@@ -3,7 +3,7 @@
 > **tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code and Cursor Agent side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
 
 > [!NOTE]
-> P1, P2, and P3 are implemented: isolated worktrees, embedded agent terminals, session resume, native conversation history and context handoff, plus GitHub PR workflows and safe cleanup. See [docs/PLAN.md](docs/PLAN.md).
+> P1–P5 are implemented: isolated worktrees, embedded agent terminals, native history and handoff, GitHub/GitLab workflows, and daemon-backed detach/attach. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Install (from source)
 
@@ -40,7 +40,7 @@ domain without code changes.
 Requires Go 1.26+ (see `go.mod`). Optional: [golangci-lint](https://golangci-lint.run) v2.9.0+ built with a compatible Go version, [goreleaser](https://goreleaser.com) v2.
 
 ```bash
-make build      # bin/maestro
+make build      # bin/maestro and bin/maestrod
 make test       # go test -race ./...
 make lint       # run the pinned Go-compatible golangci-lint
 make snapshot   # local cross-platform release build into dist/
@@ -54,7 +54,12 @@ Run inside a Git checkout with at least one commit:
 
 ```bash
 maestro new "Fix login" -a codex -b main -p "Repair the login flow"
-maestro               # restore all tasks and start/resume their agents
+maestro               # start/connect to the daemon and attach to task agents
+maestro attach        # reconnect to existing agent processes
+maestro daemon status
+maestro stop fix-login # stop one agent and save its history
+maestro daemon stop   # stop all project agents and shut down the daemon
+maestro rename fix-login "Repair login" # edit the display title
 maestro open fix-login # restore tabs, focused on this task
 maestro ls
 maestro ls --all --json
@@ -70,7 +75,7 @@ maestro config path   # print global config file location
 maestro doctor        # executable paths, versions, keyboard probe and prefix
 ```
 
-`new` provisions a task without opening the TUI, so it also works in scripts. `maestro` and `maestro open` launch all unarchived task tabs. Creating a task inside the TUI immediately launches its agent. A failed agent launch stays visible with retry instructions. Quitting stops the agents and saves session identity, exit status and terminal fallback history; this is not a daemon.
+`new` provisions a task without opening the TUI, so it also works in scripts. `maestro` and `maestro open` launch all unarchived task tabs. Creating a task inside the TUI immediately launches its agent. A failed agent launch stays visible with retry instructions. Closing the TUI or pressing `prefix q` detaches while agents continue running. `maestro daemon stop` stops agents, saves their final history, and shuts down the project daemon.
 
 The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, otherwise `ctrl+b`. Enter always reaches the agent. Use `prefix ?` for help:
 
@@ -85,10 +90,11 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix h` | Task timeline and expandable conversation history |
 | `prefix H` | Copy the handoff instruction for manual-prompt agents |
 | `prefix n` | Edit task notes (Ctrl+S saves, Esc cancels) |
+| `prefix ,` | Rename the task title (Ctrl+S saves, Esc cancels) |
 | `prefix C` | Stop the agent and save a portable task checkpoint |
 | `prefix c` | New task: title, base branch, agent and prompt |
 | `prefix d` | Hide the current tab and stop its agent |
-| `prefix g` | Sign in to GitHub |
+| `prefix g` | Sign in to the repository’s GitHub/GitLab host |
 | `prefix p`, `prefix P`, `prefix m` | Push, create/open PR, merge PR |
 | `prefix &`, `prefix u` | Archive/clean up, reopen an archived task |
 | `prefix x`, `prefix r` | Stop, restart/resume the agent |
@@ -98,9 +104,36 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix [` | Scroll history with j/k, arrows and page keys; y copies history |
 | `prefix e` | Open default/configured editor in current worktree |
 | `prefix prefix` | Send the prefix itself to the agent |
-| `prefix q` | Stop agents, save and quit |
+| `prefix q` | Detach; agents keep running |
 
 Click tabs to switch or drag to reorder. Mouse input within the terminal is forwarded; the wheel enters Maestro's scrollback. Background panes keep processing output. Runtime icons show Starting, Working, Done, NeedsInput, Exited and Crashed. Done uses native turn signals when available. A recognized native turn stays Working through silent tool execution; terminal notifications and the configurable quiet timer serve as fallbacks when native monitoring is unavailable. These fallbacks are heuristics, not proof that a long-running tool has finished. Prompt hints also use heuristics. `icons = "nerd"` conservatively uses Unicode glyphs because terminal glyph width does not reliably identify installed fonts; `ascii` uses ASCII runtime icons.
+
+### Background agents and task titles
+
+Maestro automatically starts a per-project daemon using its own executable;
+release archives also include `maestrod` for foreground supervision. No service
+installation is required. Unix uses an owner-only socket; Windows uses a named
+pipe restricted to the current user. Linked worktrees share the same daemon.
+
+Detach with `prefix q`, then run `maestro attach` or `maestro open <task>` to
+restore terminal screens, scrollback, and status without restarting agents.
+Input accepted before detach is drained. Stop individual agents with `prefix x`
+or `maestro stop <task>`. `maestro daemon stop` shuts down all agents in this project.
+The daemon stays running until explicitly stopped; restarting it reloads configuration
+and resumes saved native sessions when the TUI opens. Environment changes also
+require a daemon restart. A daemon or machine crash can lose the last unsaved
+terminal output; saved native history and session identity remain available.
+
+Notifications continue while detached. Cleanup requiring confirmation waits until
+attachment; background work never answers agent approvals or Git credential prompts.
+On connection loss, detach and attach again. Protocol mismatches require stopping
+the old daemon before starting the new version. Startup logs are stored under
+`<data>/maestro/locks/<repository-key>.daemon.log`.
+
+Use `maestro rename <slug> "New title"`, `prefix ,`, or “Rename task title” in the
+palette. Titles accept up to 512 UTF-8 bytes without control characters. The slug
+used by commands, branch, and worktree stay unchanged. See the
+[Phase 5 acceptance checklist](docs/P5_UX.md) for platform and GitLab checks.
 
 ### Palette, diff, layouts, and themes
 
@@ -185,10 +218,10 @@ See [custom agent configuration](docs/CUSTOM_AGENTS.md) for complete template,
 session identity, manual prompt, handoff, and troubleshooting guidance, and
 [the P4 UX checklist](docs/P4_UX.md) for manual acceptance checks.
 
-### GitHub authentication
+### GitHub and GitLab authentication
 
 Run `maestro auth login`, or press `prefix g` inside Maestro, to start the
-GitHub CLI's interactive login. Install `gh` first. `maestro auth status`
+appropriate CLI's interactive login. Install `gh` for GitHub or `glab` for GitLab. `maestro auth status`
 checks the credentials used by PR, CI, review, and merge commands.
 
 Credential precedence is `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token`, then
@@ -196,6 +229,22 @@ Credential precedence is `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token`, then
 interactive login; they override credentials stored by `gh`. After login,
 retry `prefix P` to create or open a PR. Uppercase shortcuts require Shift;
 `prefix p` pushes the branch.
+
+For GitLab, token precedence is `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN`, `OAUTH_TOKEN`,
+`glab config get token --host <host>`, then `gitlab.token`. GitLab.com is detected
+automatically. For a self-hosted instance, set:
+
+```toml
+[gitlab]
+host = "gitlab.example.com"
+# token = "..."  # Prefer glab's credential storage or environment variables.
+```
+
+`maestro auth login --host gitlab.example.com` also works outside a repository.
+GitLab merge requests use the existing `pr`/merge workflow, including pipeline
+and approval badges and expected-head protection. Squash and merge are supported;
+GitLab project settings control the underlying merge strategy. `rebase` is rejected
+rather than silently changing strategy. Unavailable approval data stays unknown.
 
 Git pushes use Git's credentials separately. For HTTPS remotes, use
 `gh auth setup-git` if Git still prompts for credentials; SSH remotes require
@@ -211,12 +260,12 @@ opens a credential prompt; retry it manually if authentication is required.
 `maestro archive <task>` hides a task from the tab bar and default listings.
 Inside the TUI, `prefix d` stops the current agent, saves its final history, and
 archives the tab. Worktrees, branches, session identity, and saved history are
-preserved. `maestro reopen <task>` makes the tab available on the next launch.
+preserved. `maestro reopen <task>` makes the tab available in the attached TUI or on the next attachment. Stop a running agent with `maestro stop <task>` before CLI archive/cleanup.
 
 Reopening a task with a retained PR restores its PR lifecycle so polling can
 detect changes made while it was archived. After cleanup of a completed task,
 reopening creates a fresh branch for the next cycle. This allows normal pushes
-after a squash merge even when GitHub retains the previous source branch.
+after a squash merge even when the Git host retains the previous source branch.
 
 Recreated worktrees receive the configured `worktree.copy` files and
 `worktree.setup` commands before the task becomes active. Failed provisioning
@@ -275,7 +324,7 @@ Set `manual_prompt = true` when an agent cannot accept an initial prompt in inte
 
 Configuration layers are built-in defaults, the global config file, then the main checkout's `.maestro.toml`. The `new` flags override the corresponding task choices. Agent tables merge by key, so overriding `cmd` preserves the default argument templates. See [the default config](internal/config/defaults.toml) for supported settings.
 
-Data lives in the platform's XDG data directory under `maestro`: `maestro.db`, `locks/`, and `worktrees/<repository-key>/<task-slug>/`. The repository key hashes the Git common directory, keeping checkouts with identical names separate. Commands run from a linked worktree resolve to the same project as the main checkout. The TUI holds the project lock for its lifetime; CLI listing and history remain available. A second TUI or external task-creation command reports that the project is busy.
+Data lives in the platform's XDG data directory under `maestro`: `maestro.db`, `locks/`, and `worktrees/<repository-key>/<task-slug>/`. The repository key hashes the Git common directory, keeping checkouts with identical names separate. Commands run from a linked worktree resolve to the same project as the main checkout. The daemon holds the project lock for its lifetime and allows one attached TUI. CLI mutations route through the daemon; listing and history remain available while detached. A second attached TUI reports that the project is busy.
 
 `worktree.copy` copies regular files only, skips missing files, and rejects symlinks, traversal, Git metadata and existing destinations. Copied files have owner-only permissions. `worktree.setup` runs trusted shell commands from your config in each new worktree (`sh` on Unix, `cmd` on Windows). Review repository config before using it. If initial copying, setup or database persistence fails after worktree creation, Maestro retains the checkout and reports its path and branch. Inspect and recover it manually before retrying creation; failed initial provisioning is not listed as a saved task. Reopen provisioning retains the archived task and saves progress for retry.
 
@@ -360,8 +409,8 @@ and writes `.maestro/local/handoff.md` in the same worktree before launching the
 agent. Returning to an agent resumes that agent's own native session ID.
 
 `maestro switch <task> -a <agent>` opens the focused TUI, restores other task tabs,
-and performs the same handoff. It needs an interactive terminal. An already-open
-TUI owns the project lock, so use its switch dialog instead of a second CLI process.
+and performs the same handoff. It needs an interactive terminal. Only one TUI can attach to the daemon at a time, so use its switch dialog when a
+TUI is already attached.
 
 Handoffs include the goal, notes, agent timeline, explicit TODO mentions, recent
 conversation and Git state. Set `[handoff] token_budget = 6000` to adjust the
@@ -438,7 +487,8 @@ Linux terminal smoke tests and Windows/macOS cross-builds have been performed. R
 | `internal/version` | Build metadata (set via `-ldflags`) |
 | `internal/{app,config,store,core,git,agent,term,tui}` | P1: MVP |
 | `internal/handoff` | P2: context handoff between agents |
-| `internal/forge` | P3: GitHub PRs, CI, merges |
+| `internal/forge` | GitHub PRs / GitLab MRs, CI, merges |
+| `cmd/maestrod`, `internal/daemon` | Background runtime, local IPC, detach/attach |
 
 ## License
 

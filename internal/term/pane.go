@@ -18,12 +18,13 @@ type Snapshot struct {
 	X, Y           int
 	CursorVisible  bool
 	ExitCode       int
-	InputError     error
+	InputError     error `json:"-"`
 	HasOutput      bool
 	MouseReporting bool
 }
 
 type Pane struct {
+	remote    RemotePane
 	mu        sync.Mutex
 	pty       xpty.Pty
 	emu       Emulator
@@ -140,6 +141,9 @@ func (p *Pane) invalidate() {
 func (p *Pane) Dirty() <-chan struct{} { return p.dirty }
 func (p *Pane) Done() <-chan struct{}  { return p.done }
 func (p *Pane) Snapshot(render bool) Snapshot {
+	if p.remote != nil {
+		return p.remote.Snapshot(render)
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.activity.Tick(time.Now())
@@ -150,8 +154,20 @@ func (p *Pane) Snapshot(render bool) Snapshot {
 	}
 	return s
 }
-func (p *Pane) Scrollback() []string { p.mu.Lock(); defer p.mu.Unlock(); return p.emu.Scrollback() }
+
+func (p *Pane) Scrollback() []string {
+	if p.remote != nil {
+		return p.remote.Scrollback()
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.emu.Scrollback()
+}
+
 func (p *Pane) Resize(cols, rows int) error {
+	if p.remote != nil {
+		return p.remote.Resize(cols, rows)
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.emu.Resize(max(1, cols), max(1, rows))
@@ -164,6 +180,10 @@ func (p *Pane) Resize(cols, rows int) error {
 }
 
 func (p *Pane) Key(k uv.Key, release bool) {
+	if p.remote != nil {
+		p.remote.Key(k, release)
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.activity.State == Exited || p.activity.State == Crashed {
@@ -176,6 +196,10 @@ func (p *Pane) Key(k uv.Key, release bool) {
 }
 
 func (p *Pane) Paste(s string) {
+	if p.remote != nil {
+		p.remote.Paste(s)
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.activity.State == Exited || p.activity.State == Crashed {
@@ -186,6 +210,10 @@ func (p *Pane) Paste(s string) {
 }
 
 func (p *Pane) Mouse(m uv.Mouse, release, motion bool) {
+	if p.remote != nil {
+		p.remote.Mouse(m, release, motion)
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.activity.State == Exited || p.activity.State == Crashed {
@@ -195,6 +223,10 @@ func (p *Pane) Mouse(m uv.Mouse, release, motion bool) {
 }
 
 func (p *Pane) Stop() {
+	if p.remote != nil {
+		p.remote.Stop()
+		return
+	}
 	p.stop.Do(func() {
 		select {
 		case <-p.done:
@@ -220,3 +252,27 @@ func (p *Pane) NativeEvent(kind string) Snapshot {
 	p.invalidate()
 	return state
 }
+
+// RemotePane supplies cached render state and ordered input to a daemon pane.
+type RemotePane interface {
+	FetchScrollback(context.Context) ([]string, error)
+	Snapshot(bool) Snapshot
+	Scrollback() []string
+	Resize(int, int) error
+	Key(uv.Key, bool)
+	Paste(string)
+	Mouse(uv.Mouse, bool, bool)
+	Stop()
+}
+
+func NewRemotePane(remote RemotePane) *Pane { return &Pane{remote: remote} }
+
+// FetchScrollback obtains current history for an explicit copy operation.
+func (p *Pane) FetchScrollback(ctx context.Context) ([]string, error) {
+	if p.remote != nil {
+		return p.remote.FetchScrollback(ctx)
+	}
+	return p.Scrollback(), nil
+}
+
+func (p *Pane) IsRemote() bool { return p.remote != nil }

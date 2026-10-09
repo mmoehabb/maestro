@@ -14,9 +14,10 @@ func TestActivityObservationOrder(t *testing.T) {
 		m := testModel(t)
 		// Event reads are normally scheduled by Bubble Tea. Supply harmless
 		// messages so executing a returned batch cannot block this unit test.
-		m.runtime = &core.Runtime{Events: make(chan core.Event, 32)}
-		for range cap(m.runtime.Events) {
-			m.runtime.Events <- core.Event{}
+		runtime := &core.Runtime{Events: make(chan core.Event, 32)}
+		m.runtime = runtime
+		for range cap(runtime.Events) {
+			runtime.Events <- core.Event{}
 		}
 		pane := new(term.Pane)
 		m.tabs[1].pane = pane

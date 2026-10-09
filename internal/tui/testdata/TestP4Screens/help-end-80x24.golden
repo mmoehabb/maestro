@@ -13,7 +13,7 @@
   ctrl+b e  Open editor
   ctrl+b t  Open shell in worktree
   ctrl+b z  Suspend Maestro
-  ctrl+b q  Quit and save sessions
+  ctrl+b q  Detach (keep agents running)
   
   ctrl+b ctrl+b  Send prefix to agent
   Drag tasks to reorder · Mouse wheel scrolls

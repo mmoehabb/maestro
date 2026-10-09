@@ -37,11 +37,11 @@ func TestNotesEditorRoutingAndSave(t *testing.T) {
 	if m.notes == nil {
 		t.Fatal("in-flight save was discarded")
 	}
-	_, _ = m.Update(notesSavedMsg{m.tabs[0].task.ID, value, errors.New("write failed")})
+	_, _ = m.Update(notesSavedMsg{m.tabs[0].task.ID, value, false, errors.New("write failed")})
 	if m.notes == nil || m.notes.busy || m.notes.input.Value() != value {
 		t.Fatal("failed save lost draft")
 	}
-	_, _ = m.Update(notesSavedMsg{m.tabs[0].task.ID, value, nil})
+	_, _ = m.Update(notesSavedMsg{m.tabs[0].task.ID, value, false, nil})
 	if m.notes != nil || m.tabs[0].task.Notes != value {
 		t.Fatal("save not reflected in tab")
 	}
@@ -76,5 +76,21 @@ func TestNotesSnapshots(t *testing.T) {
 		if got != string(want) {
 			t.Fatalf("%s snapshot differs", path)
 		}
+	}
+}
+
+func TestTitleEditor(t *testing.T) {
+	m := testModel(t)
+	original := m.tabs[0].task
+	m.openRename()
+	if m.notes == nil || !m.notes.rename {
+		t.Fatal("rename did not open")
+	}
+	_, _ = m.Update(notesSavedMsg{original.ID, "New title", true, nil})
+	if m.tabs[0].task.Title != "New title" || m.tabs[0].task.Slug != original.Slug || m.tabs[0].task.Notes != original.Notes {
+		t.Fatal(m.tabs[0].task)
+	}
+	if !strings.Contains(ansi.Strip(m.View().Content), "New title") {
+		t.Fatal("new title is not displayed")
 	}
 }

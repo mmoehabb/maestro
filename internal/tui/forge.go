@@ -18,6 +18,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/core"
 	"github.com/mmoehabb/maestro/internal/forge"
 	"github.com/mmoehabb/maestro/internal/forge/github"
+	"github.com/mmoehabb/maestro/internal/forge/gitlab"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/store"
 	"github.com/mmoehabb/maestro/internal/term"
@@ -164,7 +165,7 @@ func (m *Model) forgeKey(msg tea.KeyPressMsg) tea.Cmd {
 		if d.task.PRNumber != 0 {
 			switch key {
 			case "o":
-				return openBrowser(d.task.PRURL)
+				return openBrowser(d.task.PRURL, m.cfg.GitLab.Host)
 			case "y":
 				return tea.SetClipboard(d.task.PRURL)
 			}
@@ -361,11 +362,19 @@ func (m *Model) applyTask(task store.Task) {
 	}
 }
 
-func openBrowser(raw string) tea.Cmd {
+func openBrowser(raw string, hosts ...string) tea.Cmd {
 	return func() tea.Msg {
 		u, err := url.Parse(raw)
-		if err != nil || u.Scheme != "https" || u.Hostname() != "github.com" {
-			return browserMsg{fmt.Errorf("invalid GitHub PR URL")}
+		allowed := err == nil && (u.Hostname() == "github.com" || u.Hostname() == "gitlab.com")
+		if err == nil {
+			for _, host := range hosts {
+				if host != "" && strings.EqualFold(u.Hostname(), host) {
+					allowed = true
+				}
+			}
+		}
+		if err != nil || u.Scheme != "https" || u.User != nil || !allowed {
+			return browserMsg{fmt.Errorf("invalid pull/merge request URL")}
 		}
 		name := "xdg-open"
 		args := []string{raw}
@@ -446,6 +455,10 @@ type githubLoginMsg struct{ err error }
 
 func (m *Model) loginGitHub() tea.Cmd {
 	cmd, err := github.LoginCommand(context.Background())
+	host := forge.RemoteHost(m.service.Repo.Remote)
+	if host == "gitlab.com" || (m.cfg.GitLab.Host != "" && host == m.cfg.GitLab.Host) {
+		cmd, err = gitlab.LoginCommand(context.Background(), host)
+	}
 	if err != nil {
 		m.notify(err.Error())
 		return nil

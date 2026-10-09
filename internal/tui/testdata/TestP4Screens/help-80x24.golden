@@ -13,11 +13,11 @@
   ctrl+b a  Switch agent
   ctrl+b h  Task history
   ctrl+b n  Edit task notes
+  ctrl+b ,  Rename task title
   ctrl+b C  Stop agent and save portable checkpoint
   ctrl+b H  Copy manual handoff instruction
   ctrl+b D  View diff against base
   ctrl+b s  Toggle tabs / sidebar
-  ctrl+b T  Choose color theme
   ↑/↓ scroll · PgUp/PgDn · Esc return
   ────────────────────────────────────────────────────────────────────────────
   maestro/fix-auth                                             +0 −0 · 0 files

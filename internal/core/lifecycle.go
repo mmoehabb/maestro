@@ -39,6 +39,9 @@ func (s *TaskService) Reopen(ctx context.Context, slug string) error {
 }
 
 func (s *TaskService) DeleteArchived(ctx context.Context, slug string) error {
+	if s.Remote != nil {
+		return s.Remote.Call(ctx, "delete-task", Request{Slug: slug}, nil)
+	}
 	return s.mutateTask(ctx, slug, func(t store.Task) error { return s.Store.DeleteArchived(ctx, t.ID) })
 }
 

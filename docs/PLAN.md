@@ -9,9 +9,9 @@
 | Topic | Decision |
 |---|---|
 | Terminal hosting | Built-in terminal: Bubble Tea v2 + `charmbracelet/x/vt` + `charmbracelet/x/xpty` (PTY on Unix, ConPTY on Windows) |
-| Persistence | No daemon in v1. On restart, Maestro reopens each agent's own session (resume by ID). Detach/attach comes in a later phase |
+| Persistence | P5 daemon owns agent processes; TUI detach/attach preserves them. After daemon restart, resume by native session ID |
 | Context transfer | Handoff brief: Maestro reads each agent's session logs into one task history and starts the next agent with a generated `.maestro/handoff.md` |
-| Git host | GitHub first, behind a `forge.Provider` interface |
+| Git host | GitHub and GitLab behind `forge.Provider` |
 | Prefix key | `ctrl+m`, with automatic fallback to `ctrl+b` (see warning below) |
 | Worktree location | `<xdg data>/maestro/worktrees/<repo>/<task>` |
 | "Done" | A **runtime** state: the agent is idle because it has finished thinking and applying changes for its current turn |
@@ -42,21 +42,22 @@
 flowchart TD
   CLI["cmd/maestro (cobra)"] --> App["internal/app (wiring)"]
   App --> TUI["internal/tui (Bubble Tea v2)"]
-  App --> Core["internal/core (TaskService)"]
-  TUI --> Pane["internal/term (Pane = xpty + vt)"]
-  TUI --> Core
+  App --> Daemon["maestrod / local IPC"]
+  TUI --> Daemon
+  Daemon --> Pane["internal/term (Pane = xpty + vt)"]
+  Daemon --> Core["internal/core (TaskService)"]
   Core --> Store[("internal/store (SQLite)")]
   Core --> Git["internal/git (worktree, branch, diff)"]
   Core --> Agents["internal/agent (registry + adapters)"]
   Core --> Handoff["internal/handoff"]
-  Core --> Forge["internal/forge (GitHub)"]
+  Core --> Forge["internal/forge (GitHub / GitLab)"]
   Agents --> Native["Agent session files (codex, agy, opencode)"]
-  Forge --> GH["GitHub REST API"]
+  Forge --> GH["GitHub / GitLab REST APIs"]
 ```
 
 - **The TUI never touches git or the DB directly.** It calls `core.TaskService`, which emits events (`TaskUpdated`, `AgentActivity`, `PRStatusChanged`) as Bubble Tea messages.
 - **Every git operation runs the system `git` binary** (not go-git). This respects your config, hooks, credential helpers and signing.
-- **One TUI per project at a time**, enforced with a lock file (`flock` on Unix, `LockFileEx` on Windows). Read-only CLI commands still work while the TUI is open.
+- **One attached TUI per project at a time**. The daemon owns the project lock (`flock` on Unix, `LockFileEx` on Windows) and serializes CLI mutations; read-only CLI commands remain available.
 
 ### Task model
 
@@ -405,7 +406,7 @@ The active tab has a highlighted surface and underline, and the list scrolls wit
 | `prefix p` | Push | `prefix P` | Create / open PR |
 | `prefix m` | Merge PR (squash) | `prefix n` | Edit task notes |
 | `prefix [` | Scroll / copy mode | `prefix T` | Preview / save theme |
-| `prefix &` | Archive task | `prefix q` | Quit (agents stop; resumed next launch) |
+| `prefix &` | Archive task | `prefix q` | Detach (agents continue in daemon) |
 | `prefix z` | Suspend app | `prefix s` | Toggle tabs / sidebar layout |
 | `prefix t` | Open shell in task directory | `prefix prefix` | Send the prefix key itself to the agent |
 
@@ -437,7 +438,7 @@ maestro completion <shell>
 
 ### Implementation status
 
-P0–P4 implementations are delivered, with P4 review corrections tracked in [P4_REVIEW_PLAN.md](P4_REVIEW_PLAN.md). Authenticated live GitHub acceptance and native macOS/Windows P4 terminal and desktop-notification acceptance remain manual checks. P1 includes:
+P0–P5 implementations are delivered, with P4 review corrections tracked in [P4_REVIEW_PLAN.md](P4_REVIEW_PLAN.md). Authenticated live GitHub acceptance and native macOS/Windows P4 terminal and desktop-notification acceptance remain manual checks. P1 includes:
 
 - Layered TOML defaults/global/repo configuration, validation, and per-task CLI overrides.
 - SQLite migration with WAL and foreign keys; project/task/session persistence, atomic creation/start events, exit status and terminal fallback history.
@@ -496,6 +497,25 @@ P4 implementation includes:
 - Custom-agent configuration guidance and a [manual UX checklist](P4_UX.md). Native desktop notification delivery and cross-platform terminal UX remain manual acceptance checks.
 - Teatest/v2 screen goldens at both planned sizes, alongside regression coverage for palette input, diff replies, ordering persistence, themes, and notification deduplication. The Linux PTY smoke test covers three agents, palette selection, diff, sidebar, mouse drag, persisted order, resize, prompt forwarding, scrollable help, quit, and resume with unchanged native session IDs.
 
+P5 implementation includes:
+
+- Per-project daemon ownership of PTY/ConPTY agents, emulators, history import,
+  polling, and locks; versioned owner-restricted Unix socket / Windows named-pipe IPC.
+- Automatic daemon startup, one attached TUI, bounded input and snapshot messages,
+  screen/scrollback restoration without agent relaunch, explicit stop/shutdown,
+  stale endpoint recovery, credential forwarding, and CLI mutation routing.
+- Detached notifications and deferred cleanup confirmations; final history flush
+  on shutdown. Saved sessions resume after daemon restart; crashes may lose the
+  latest unpersisted terminal output.
+- GitLab.com and configured self-hosted providers with nested namespaces,
+  `glab`/environment/config authentication, MR creation and lookup, pipeline/review
+  status, rate-limit backoff, and expected-head squash/merge protection.
+- Persisted title-only editing with validation and timeline events, reflected in
+  tabs, the sidebar, palette, and CLI listings.
+- Both executables in release builds, daemon and GitLab integration tests, and
+  the [P5 manual acceptance checklist](P5_UX.md). Authenticated live GitLab and
+  native macOS/Windows acceptance remain manual checks.
+
 ```mermaid
 flowchart LR
   P0["P0 Bootstrap"] --> P1["P1 MVP: tabs, panes, worktrees, persistence"]
@@ -514,9 +534,8 @@ flowchart LR
 | **P4** | Command palette, diff view, sidebar layout, themes, mouse drag, desktop notifications, custom agents docs | UX review pass; teatest golden files for every screen |
 | **P5** | `maestrod` (Unix socket / Windows named pipe) for detach/attach, GitLab provider | Agents keep running after the TUI closes |
 
-P5 UI follow-up: title-only task rename. The earlier proposed `prefix ,` binding
-is not implemented or advertised in P4. Slug, branch, and worktree renaming are
-separate scope; they must not be implied by title editing.
+P5 includes title-only task rename through `maestro rename`, `prefix ,`, and the
+palette. Slug, branch, and worktree identity remain unchanged.
 
 ---
 
@@ -548,7 +567,7 @@ go test ./internal/tui/... -update        # regenerate teatest golden files (rev
    - In Ghostty/kitty/WezTerm, `ctrl+m` should act as the prefix.
    - In GNOME Terminal or tmux, Maestro should switch to `ctrl+b` and show a toast saying so.
 3. Give an agent a prompt. The tab should spin while it works, turn to **Done** when it finishes, and go to needs-input when an approval prompt appears.
-4. `prefix q`, then relaunch: tabs come back and each agent resumes its own session.
+4. `prefix q`, then `maestro attach`: tabs return with unchanged agent PIDs and native IDs. After `maestro daemon stop`, reopening resumes saved native sessions.
 5. Switch codex → agy in one task: agy should summarise the earlier work without being told again.
 6. Push and open a PR from the TUI, squash-merge it, and watch the tab go to merged and then to the cleanup prompt. `maestro history <task>` should still show the whole conversation.
 7. Repeat steps 1–4 on Windows Terminal and on macOS iTerm/Ghostty.

@@ -4,10 +4,16 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/mmoehabb/maestro/internal/daemon"
 
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
+	"github.com/mmoehabb/maestro/internal/forge"
 	"github.com/mmoehabb/maestro/internal/forge/github"
+	"github.com/mmoehabb/maestro/internal/forge/gitlab"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/store"
 )
@@ -46,9 +52,25 @@ func OpenLocal(ctx context.Context, dir string, paths config.Paths) (*core.TaskS
 		_ = db.Close()
 		return nil, err
 	}
-	return &core.TaskService{
-		Forge: github.New(cfg.GitHub.Token), DataDir: paths.DataDir,
+	var provider forge.Provider = github.New(cfg.GitHub.Token)
+	host := forge.RemoteHost(repo.Remote)
+	if host == "gitlab.com" || (cfg.GitLab.Host != "" && strings.EqualFold(host, cfg.GitLab.Host)) {
+		provider = gitlab.New(host, cfg.GitLab.Token)
+	}
+	service := &core.TaskService{
+		Forge: provider, DataDir: paths.DataDir,
 		Config: cfg, Repo: repo, Project: project, Store: db,
 		LockPath: filepath.Join(paths.DataDir, "locks", repo.Key()+".lock"),
-	}, nil
+	}
+	address, err := daemon.Endpoint(paths.DataDir, repo.Key())
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	probe, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	if _, err = daemon.Probe(probe, address); err == nil {
+		service.Remote = daemon.Remote{Address: address}
+	}
+	return service, nil
 }

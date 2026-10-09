@@ -3,6 +3,7 @@ module github.com/mmoehabb/maestro
 go 1.26.0
 
 require (
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261004011457-ad85c59fdf4e
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/go-github/v74 v74.0.0

@@ -32,6 +32,10 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 
 	root.AddCommand(
 		newVersionCmd(),
+		newDaemonCmd(),
+		newRenameCmd(),
+		newStopCmd(),
+		&cobra.Command{Use: "attach", Short: "Attach to project agents", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return app.Run(cmd.Context(), ".", "", cmd.OutOrStdout()) }},
 		newTaskCmd(),
 		newListCmd(),
 		&cobra.Command{Use: "open <task>", Short: "Open the TUI focused on a task", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {

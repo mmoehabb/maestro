@@ -125,3 +125,11 @@ func runWithPrompt(ctx context.Context, cmd *exec.Cmd, prompt CredentialPrompt) 
 	}
 	return string(output), err
 }
+
+// PromptCredential forwards an IPC credential challenge to the current caller.
+func PromptCredential(ctx context.Context, prompt string) (string, error) {
+	if callback, ok := ctx.Value(credentialPromptKey{}).(CredentialPrompt); ok {
+		return callback(ctx, prompt)
+	}
+	return "", fmt.Errorf("git credentials required; authenticate with your credential helper or retry in the TUI")
+}

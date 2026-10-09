@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
@@ -10,16 +11,18 @@ import (
 )
 
 type notesDialog struct {
-	task  store.Task
-	input textarea.Model
-	busy  bool
-	err   string
+	task   store.Task
+	input  textarea.Model
+	rename bool
+	busy   bool
+	err    string
 }
 
 type notesSavedMsg struct {
-	id    int64
-	notes string
-	err   error
+	id     int64
+	notes  string
+	rename bool
+	err    error
 }
 
 func (m *Model) openNotes() tea.Cmd {
@@ -56,7 +59,10 @@ func (m *Model) notesKey(msg tea.KeyPressMsg) tea.Cmd {
 		d.err = ""
 		task, notes := d.task, d.input.Value()
 		return func() tea.Msg {
-			return notesSavedMsg{task.ID, notes, m.runtime.SetNotes(context.Background(), task, notes)}
+			if d.rename {
+				return notesSavedMsg{task.ID, strings.TrimSpace(notes), true, m.runtime.Rename(context.Background(), task, notes)}
+			}
+			return notesSavedMsg{task.ID, notes, false, m.runtime.SetNotes(context.Background(), task, notes)}
 		}
 	}
 	var cmd tea.Cmd
@@ -72,6 +78,10 @@ func (d *notesDialog) View() string {
 	if d.err != "" {
 		footer = d.err + "\n" + footer
 	}
+	if d.rename {
+		footer = strings.ReplaceAll(footer, " · Enter new line", "")
+		return "Rename task · " + d.task.Slug + "\nEdit the display title.\n\n" + d.input.View() + "\n" + footer
+	}
 	return "Task notes · " + d.task.Slug + "\nIncluded in the next agent handoff.\n\n" + d.input.View() + "\n" + footer
 }
 
@@ -79,7 +89,11 @@ func (m *Model) notesSaved(msg notesSavedMsg) {
 	if msg.err == nil {
 		for i := range m.tabs {
 			if m.tabs[i].task.ID == msg.id {
-				m.tabs[i].task.Notes = msg.notes
+				if msg.rename {
+					m.tabs[i].task.Title = msg.notes
+				} else {
+					m.tabs[i].task.Notes = msg.notes
+				}
 			}
 		}
 	}
@@ -92,5 +106,21 @@ func (m *Model) notesSaved(msg notesSavedMsg) {
 		return
 	}
 	m.notes = nil
-	m.notify("Notes saved.")
+	if msg.rename {
+		m.notify("Title saved.")
+	} else {
+		m.notify("Notes saved.")
+	}
+}
+
+func (m *Model) openRename() tea.Cmd {
+	cmd := m.openNotes()
+	if m.notes != nil {
+		m.notes.rename = true
+		m.notes.input.CharLimit = 512
+		m.notes.input.Placeholder = "Task title"
+		m.notes.input.SetValue(m.notes.task.Title)
+		m.notes.input.SetHeight(2)
+	}
+	return cmd
 }

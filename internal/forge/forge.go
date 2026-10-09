@@ -9,20 +9,57 @@ import (
 
 type Repo struct{ Owner, Name string }
 
-// ParseRemote supports GitHub HTTPS, SSH and scp-style origin URLs.
-func ParseRemote(remote string) (Repo, error) {
-	if strings.HasPrefix(remote, "git@github.com:") {
-		remote = "https://github.com/" + strings.TrimPrefix(remote, "git@github.com:")
+// RemoteHost accepts HTTPS, SSH and scp-style remotes.
+func RemoteHost(remote string) string {
+	u, err := remoteURL(remote)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+func remoteURL(remote string) (*url.URL, error) {
+	if !strings.Contains(remote, "://") {
+		if left, path, ok := strings.Cut(remote, ":"); ok && strings.Contains(left, "@") {
+			remote = "ssh://" + left + "/" + path
+		}
 	}
 	u, err := url.Parse(remote)
-	if err != nil || !strings.EqualFold(u.Hostname(), "github.com") || (u.Scheme != "https" && u.Scheme != "ssh" && u.Scheme != "git") {
-		return Repo{}, fmt.Errorf("origin must be a github.com repository URL")
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme != "https" && u.Scheme != "ssh" && u.Scheme != "git" {
+		return nil, fmt.Errorf("unsupported Git remote URL")
+	}
+	return u, nil
+}
+
+// ParseRemote includes an explicitly configured self-hosted GitLab hostname.
+func ParseRemote(remote string, gitlabHosts ...string) (Repo, error) {
+	u, err := remoteURL(remote)
+	if err != nil {
+		return Repo{}, err
+	}
+	host := strings.ToLower(u.Hostname())
+	allowed := host == "github.com" || host == "gitlab.com"
+	for _, configured := range gitlabHosts {
+		if configured != "" && strings.EqualFold(host, configured) {
+			allowed = true
+		}
+	}
+	if !allowed {
+		return Repo{}, fmt.Errorf("origin must identify GitHub, GitLab, or the configured gitlab.host")
 	}
 	parts := strings.Split(strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git"), "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || parts[0] == "." || parts[1] == "." || parts[0] == ".." || parts[1] == ".." {
-		return Repo{}, fmt.Errorf("origin must identify a GitHub owner and repository")
+	if len(parts) < 2 || (host == "github.com" && len(parts) != 2) {
+		return Repo{}, fmt.Errorf("origin must identify a namespace and repository")
 	}
-	return Repo{parts[0], parts[1]}, nil
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return Repo{}, fmt.Errorf("invalid repository path")
+		}
+	}
+	return Repo{Owner: strings.Join(parts[:len(parts)-1], "/"), Name: parts[len(parts)-1]}, nil
 }
 
 type PR struct {

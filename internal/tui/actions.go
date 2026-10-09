@@ -21,16 +21,17 @@ var actions = []action{
 	{"a", "Switch agent", true},
 	{"h", "Task history", true},
 	{"n", "Edit task notes", true},
+	{",", "Rename task title", true},
 	{"C", "Stop agent and save portable checkpoint", true},
 	{"H", "Copy manual handoff instruction", true},
 	{"D", "View diff against base", true},
 	{"s", "Toggle tabs / sidebar", false},
 	{"T", "Choose color theme", false},
 	{"?", "Help", false},
-	{"g", "Sign in to GitHub", false},
+	{"g", "Sign in to Git host", false},
 	{"p", "Push branch", true},
-	{"P", "Create / open pull request", true},
-	{"m", "Merge pull request", true},
+	{"P", "Create / open pull or merge request", true},
+	{"m", "Merge pull or merge request", true},
 	{"&", "Archive / clean up worktree", true},
 	{"u", "Reopen archived task", false},
 	{"d", "Hide tab (preserve worktree)", true},
@@ -41,7 +42,7 @@ var actions = []action{
 	{"e", "Open editor", true},
 	{"t", "Open shell in worktree", true},
 	{"z", "Suspend Maestro", false},
-	{"q", "Quit and save sessions", false},
+	{"q", "Detach (keep agents running)", false},
 }
 
 func (m *Model) disabled(a action) string {
@@ -90,6 +91,8 @@ func (m *Model) dispatch(key string) tea.Cmd {
 		return m.openSwitch()
 	case "h":
 		return m.openHistory()
+	case ",":
+		return m.openRename()
 	case "n":
 		return m.openNotes()
 	case "C":

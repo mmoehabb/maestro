@@ -1,4 +1,4 @@
-// Package notify delivers best-effort desktop alerts without a daemon.
+// Package notify delivers best-effort desktop alerts for attached and detached runtimes.
 package notify
 
 import (

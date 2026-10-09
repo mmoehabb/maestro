@@ -11,6 +11,7 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 
 	"github.com/mmoehabb/maestro/internal/config"
+	"github.com/mmoehabb/maestro/internal/daemon"
 	"github.com/mmoehabb/maestro/internal/notify"
 	"github.com/mmoehabb/maestro/internal/tui"
 )
@@ -43,11 +44,20 @@ func RunSwitch(ctx context.Context, dir, focus, target string, output io.Writer)
 			return fmt.Errorf("task %q not found", focus)
 		}
 	}
-	r, err := s.OpenRuntime()
+	paths := config.DefaultPaths()
+	address, err := daemon.Endpoint(paths.DataDir, s.Repo.Key())
+	if err != nil {
+		return err
+	}
+	if err = daemon.Ensure(ctx, address, s.Repo.Root, s.Repo.Key(), paths); err != nil {
+		return err
+	}
+	r, err := daemon.Attach(ctx, address)
 	if err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, r.Close()) }()
+	s.Remote = r
 	model := tui.New(s, r, focus)
 	model.SetSwitchAgent(target)
 	model.SetNotifier(notify.Desktop{})

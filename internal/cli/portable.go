@@ -11,7 +11,7 @@ import (
 
 func newCheckpointCmd() *cobra.Command {
 	var branch string
-	cmd := &cobra.Command{Use: "checkpoint <task>", Short: "Write portable task context for review, commit and push", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "checkpoint <task>", Short: "Stop the agent and write portable context for review, commit and push", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := app.OpenLocal(cmd.Context(), ".", config.DefaultPaths())
 		if err != nil {
 			return err

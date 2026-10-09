@@ -1,9 +1,6 @@
 # Maestro
 
-> **tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code and Cursor Agent side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
-
-> [!NOTE]
-> P1–P5 are implemented: isolated worktrees, embedded agent terminals, native history and handoff, GitHub/GitLab workflows, and daemon-backed detach/attach. See [docs/PLAN.md](docs/PLAN.md).
+**tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code and Cursor Agent side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
 
 ## Install (from source)
 

@@ -15,16 +15,17 @@
    ctrl+b a  Switch agent
    ctrl+b h  Task history
    ctrl+b n  Edit task notes
+   ctrl+b ,  Rename task title
    ctrl+b C  Stop agent and save portable checkpoint
    ctrl+b H  Copy manual handoff instruction
    ctrl+b D  View diff against base
    ctrl+b s  Toggle tabs / sidebar
    ctrl+b T  Choose color theme
    ctrl+b ?  Help
-   ctrl+b g  Sign in to GitHub
+   ctrl+b g  Sign in to Git host
    ctrl+b p  Push branch
-   ctrl+b P  Create / open pull request
-   ctrl+b m  Merge pull request
+   ctrl+b P  Create / open pull or merge request
+   ctrl+b m  Merge pull or merge request
    ctrl+b &  Archive / clean up worktree
    ctrl+b u  Reopen archived task
    ctrl+b d  Hide tab (preserve worktree)
@@ -35,11 +36,10 @@
    ctrl+b e  Open editor
    ctrl+b t  Open shell in worktree
    ctrl+b z  Suspend Maestro
-   ctrl+b q  Quit and save sessions
+   ctrl+b q  Detach (keep agents running)
    
    ctrl+b ctrl+b  Send prefix to agent
    Drag tasks to reorder · Mouse wheel scrolls
-   Ctrl+C and Enter reach the agent outside views.
    ↑/↓ scroll · PgUp/PgDn · Esc return
 
    ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

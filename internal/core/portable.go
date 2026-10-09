@@ -34,37 +34,18 @@ func (s *TaskService) Checkpoint(ctx context.Context, slug string) (string, erro
 
 // CheckpointOnBranch explicitly adopts a branch renamed in the same checkout.
 func (s *TaskService) CheckpointOnBranch(ctx context.Context, slug, branch string) (string, error) {
+	if s.Remote != nil {
+		var path string
+		err := s.Remote.Call(ctx, "checkpoint", Request{Slug: slug, Text: branch}, &path)
+		return path, err
+	}
 	var path string
 	err := s.mutateTask(ctx, slug, func(t store.Task) error {
-		if branch != "" && branch != t.Branch {
-			if err := s.Repo.ValidateTaskCheckout(ctx, t.Worktree, branch); err != nil {
-				return err
-			}
-			tasks, err := s.Store.Tasks(ctx, s.Project.ID, true)
-			if err != nil {
-				return err
-			}
-			for _, other := range tasks {
-				if other.ID != t.ID && other.Branch == branch {
-					return fmt.Errorf("branch already belongs to task %s", other.Slug)
-				}
-			}
-			p, err := s.Store.Portable(ctx, t.ID)
-			if err != nil {
-				return err
-			}
-			t.Branch = branch
-			if err = s.Store.SaveWorkflow(ctx, t, "branch_renamed"); err != nil {
-				return err
-			}
-			if p.Checkpoint.ID != "" {
-				p.SourceCommit, p.SourceRef = "", ""
-				if err = s.Store.SavePortable(ctx, t.ID, p); err != nil {
-					return err
-				}
-			}
-		}
 		var err error
+		t, err = s.adoptBranch(ctx, t, branch)
+		if err != nil {
+			return err
+		}
 		path, err = s.checkpoint(ctx, t)
 		return err
 	})
@@ -74,6 +55,10 @@ func (s *TaskService) CheckpointOnBranch(ctx context.Context, slug, branch strin
 // Checkpoint stops and drains the agent so the checkpoint includes its final
 // native history and terminal fallback. Restart/resume remains available.
 func (r *Runtime) Checkpoint(ctx context.Context, task store.Task) (string, error) {
+	return r.CheckpointOnBranch(ctx, task, "")
+}
+
+func (r *Runtime) CheckpointOnBranch(ctx context.Context, task store.Task, branch string) (string, error) {
 	done, err := r.operation(task.ID)
 	if err != nil {
 		return "", err
@@ -89,6 +74,10 @@ func (r *Runtime) Checkpoint(ctx context.Context, task store.Task) (string, erro
 		}
 	}
 	task, err = r.Service.Find(ctx, task.Slug)
+	if err != nil {
+		return "", err
+	}
+	task, err = r.Service.adoptBranch(ctx, task, branch)
 	if err != nil {
 		return "", err
 	}
@@ -225,6 +214,9 @@ func (s *TaskService) DiscoverTasks(ctx context.Context) error {
 }
 
 func (s *TaskService) RestoreTasks(ctx context.Context, ref string, replace bool) error {
+	if s.Remote != nil {
+		return s.Remote.Call(ctx, "restore", Request{Text: ref, Replace: replace}, nil)
+	}
 	lock := flock.New(s.LockPath)
 	ok, err := lock.TryLock()
 	if err != nil {
@@ -429,4 +421,72 @@ func (s *TaskService) portablePRBase(ctx context.Context, task store.Task) strin
 	}
 	// A commit-only base still requires an explicit PR target, as before.
 	return ""
+}
+
+func (s *TaskService) adoptBranch(ctx context.Context, t store.Task, branch string) (store.Task, error) {
+	if branch != "" && branch != t.Branch {
+		if err := s.Repo.ValidateTaskCheckout(ctx, t.Worktree, branch); err != nil {
+			return t, err
+		}
+		tasks, err := s.Store.Tasks(ctx, s.Project.ID, true)
+		if err != nil {
+			return t, err
+		}
+		for _, other := range tasks {
+			if other.ID != t.ID && other.Branch == branch {
+				return t, fmt.Errorf("branch already belongs to task %s", other.Slug)
+			}
+		}
+		p, err := s.Store.Portable(ctx, t.ID)
+		if err != nil {
+			return t, err
+		}
+		t.Branch = branch
+		if err = s.Store.SaveWorkflow(ctx, t, "branch_renamed"); err != nil {
+			return t, err
+		}
+		if p.Checkpoint.ID != "" {
+			p.SourceCommit, p.SourceRef = "", ""
+			if err = s.Store.SavePortable(ctx, t.ID, p); err != nil {
+				return t, err
+			}
+		}
+	}
+	return t, nil
+}
+
+func (r *Runtime) RestoreTasks(ctx context.Context, ref string, replace bool) error {
+	done, err := r.operation(0)
+	if err != nil {
+		return err
+	}
+	defer done()
+	for _, info := range r.Panes() {
+		select {
+		case <-info.Pane.Done():
+		default:
+			return fmt.Errorf("stop running agents before restoring task metadata")
+		}
+	}
+	for _, info := range r.Panes() {
+		if entry := r.entry(info.TaskID); entry != nil {
+			<-entry.finished
+		}
+	}
+	if err := r.Service.restoreTasks(ctx, ref, replace); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	clear(r.panes)
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *Runtime) DeleteArchived(ctx context.Context, task store.Task) error {
+	done, err := r.operation(task.ID)
+	if err != nil {
+		return err
+	}
+	defer done()
+	return r.Service.Store.DeleteArchived(ctx, task.ID)
 }

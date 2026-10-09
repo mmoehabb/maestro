@@ -88,7 +88,7 @@ type Model struct {
 	history                                                   *historyView
 	notes                                                     *notesDialog
 	service                                                   *core.TaskService
-	runtime                                                   *core.Runtime
+	runtime                                                   Runtime
 	cfg                                                       config.Config
 	tabs                                                      []tab
 	active, width, height, frame                              int
@@ -102,7 +102,7 @@ type Model struct {
 	swallowed                                                 map[rune]bool
 }
 
-func New(s *core.TaskService, r *core.Runtime, focus string) *Model {
+func New(s *core.TaskService, r Runtime, focus string) *Model {
 	return &Model{
 		credentials: make(chan credentialRequest, 16),
 		service:     s, runtime: r, cfg: s.Config, focus: focus, width: 80, height: 24,
@@ -112,7 +112,7 @@ func New(s *core.TaskService, r *core.Runtime, focus string) *Model {
 }
 
 func tick() tea.Cmd             { return tea.Tick(time.Second/30, func(t time.Time) tea.Msg { return tickMsg(t) }) }
-func (m *Model) event() tea.Cmd { return func() tea.Msg { return <-m.runtime.Events } }
+func (m *Model) event() tea.Cmd { return func() tea.Msg { return <-m.runtime.EventStream() } }
 func (m *Model) Init() tea.Cmd {
 	return tea.Batch(tea.RequestBackgroundColor, tick(), m.event(), tea.Tick(600*time.Millisecond, func(time.Time) tea.Msg { return prefixTimeoutMsg{} }), func() tea.Msg {
 		tasks, err := m.service.List(context.Background(), false)
@@ -141,12 +141,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case githubLoginMsg:
 		if msg.err != nil {
-			m.notify("GitHub login failed: " + msg.err.Error())
+			m.notify("Git host login failed: " + msg.err.Error())
 		} else {
+			if m.service.Remote != nil {
+				_ = m.service.Remote.Call(context.Background(), "auth-reset", core.Request{}, nil)
+			}
 			if provider, ok := m.service.Forge.(interface{ ResetAuth() }); ok {
 				provider.ResetAuth()
 			}
-			m.notify("GitHub login completed. Retry the GitHub command.")
+			m.notify("Git host login completed. Retry the command.")
 		}
 	case inputMsg:
 		return m, m.inputReply(msg)
@@ -281,6 +284,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				t := &m.tabs[i]
 				t.pending = false
 				t.attachPane(msg.pane)
+				if msg.pane != nil && msg.pane.IsRemote() {
+					snapshot := msg.pane.Snapshot(false)
+					t.acceptActivity(msg.pane, snapshot.State, snapshot.Revision)
+					m.observed[t.task.ID] = activityObservation{pane: msg.pane, state: snapshot.State, revision: snapshot.Revision}
+				}
 				t.err = msg.err
 				if msg.err == nil {
 					// Start may have completed a persisted pending switch from an earlier run.
@@ -308,6 +316,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.dialog = nil
+		for i, t := range m.tabs {
+			if t.task.ID == msg.task.ID {
+				m.active = i
+				return m, nil
+			}
+		}
 		m.tabs = append(m.tabs, tab{task: msg.task, state: term.Starting})
 		m.observed[msg.task.ID] = activityObservation{state: term.Starting}
 		m.active = len(m.tabs) - 1
@@ -345,6 +359,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notify("Shell: " + msg.err.Error())
 		}
 	case core.Event:
+		var reconcile tea.Cmd
+		if msg.Tasks != nil && m.loaded {
+			reconcile = m.reconcileTasks(msg.Tasks)
+		}
 		if msg.Task != nil {
 			m.applyTask(*msg.Task)
 			if msg.Cleanup {
@@ -362,7 +380,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		return m, tea.Batch(m.event(), m.observeActivity())
+		return m, tea.Batch(m.event(), m.observeActivity(), reconcile)
 	case statusMsg:
 		m.statusPending = false
 		for i := range m.tabs {
@@ -476,9 +494,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scroll = max(0, m.scroll-rows)
 			case "y":
 				if len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
-					text := strings.Join(m.tabs[m.active].pane.Scrollback(), "\n")
+					pane := m.tabs[m.active].pane
 					m.scroll = 0
-					return m, tea.SetClipboard(text)
+					return m, func() tea.Msg {
+						ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+						defer cancel()
+						lines, err := pane.FetchScrollback(ctx)
+						if err != nil {
+							return browserMsg{err}
+						}
+						return tea.SetClipboard(strings.Join(lines, "\n"))()
+					}
 				}
 			}
 			return m, nil

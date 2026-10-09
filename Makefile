@@ -8,6 +8,7 @@ GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/$(BINARY) ./cmd/maestro
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/maestrod ./cmd/maestrod
 
 run: build
 	./bin/$(BINARY) $(ARGS)

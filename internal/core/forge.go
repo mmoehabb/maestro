@@ -20,6 +20,11 @@ type WorkflowOptions struct {
 // Workflow is the CLI entry point. Runtime uses the same operations under its
 // project lock and per-task operation lock.
 func (s *TaskService) Workflow(ctx context.Context, slug, action string, opts WorkflowOptions) (store.Task, error) {
+	if s.Remote != nil {
+		var t store.Task
+		err := s.Remote.Call(ctx, "workflow", Request{Slug: slug, Action: action, Options: opts}, &t)
+		return t, err
+	}
 	var result store.Task
 	err := s.mutateTask(ctx, slug, func(t store.Task) error {
 		var e error
@@ -103,12 +108,12 @@ func (s *TaskService) workflow(ctx context.Context, task store.Task, action stri
 		err := s.Store.SaveWorkflow(ctx, task, "pushed")
 		return task, err
 	}
-	repo, err := forge.ParseRemote(s.Repo.Remote)
+	repo, err := forge.ParseRemote(s.Repo.Remote, s.Config.GitLab.Host)
 	if err != nil {
 		return task, err
 	}
 	if s.Forge == nil {
-		return task, fmt.Errorf("GitHub provider is unavailable")
+		return task, fmt.Errorf("git host provider is unavailable")
 	}
 	var pr *forge.PR
 	if task.PRNumber != 0 {

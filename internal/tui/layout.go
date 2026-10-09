@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mmoehabb/maestro/internal/store"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -57,7 +59,7 @@ func (m *Model) taskLabel(i int) string {
 		color = p.Error
 	}
 	mark = colored(color).Render(mark)
-	label := fmt.Sprintf(" %s %s%s  %s ", mark, lifecycleBadgeWithPalette(t.task, m.cfg.Icons, m.paletteColors()), t.task.Slug, m.mutedStyle().Render(t.task.Agent))
+	label := fmt.Sprintf(" %s %s%s  %s ", mark, lifecycleBadgeWithPalette(t.task, m.cfg.Icons, m.paletteColors()), taskTitle(t.task), m.mutedStyle().Render(t.task.Agent))
 	return label
 }
 
@@ -375,4 +377,11 @@ func (m *Model) mouse(msg tea.MouseMsg) tea.Cmd {
 		pane.Mouse(uv.Mouse(mouse), release, motion)
 	}
 	return nil
+}
+
+func taskTitle(t store.Task) string {
+	if t.Title != "" {
+		return t.Title
+	}
+	return t.Slug
 }

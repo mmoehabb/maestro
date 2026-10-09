@@ -65,7 +65,11 @@ func (m *Model) styleInputs() {
 	if m.notes != nil {
 		m.notes.input.SetStyles(areaStyles(p))
 		m.notes.input.SetWidth(max(1, cols-2))
-		m.notes.input.SetHeight(max(1, rows-5))
+		if m.notes.rename {
+			m.notes.input.SetHeight(1)
+		} else {
+			m.notes.input.SetHeight(max(1, rows-5))
+		}
 	}
 	if m.forgeUI != nil {
 		d := m.forgeUI

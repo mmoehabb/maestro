@@ -147,7 +147,7 @@ func (m *Model) sessionMeta(width int) string {
 	case term.Crashed:
 		label, color = "Crashed", p.Error
 	}
-	left := colored(p.Foreground).Render(strings.ToUpper(t.task.Agent)) + m.mutedStyle().Render(" / "+t.task.Slug)
+	left := colored(p.Foreground).Render(strings.ToUpper(t.task.Agent)) + m.mutedStyle().Render(" / "+taskTitle(t.task))
 	return rowPair(left, colored(color).Render(icon(t.state, m.frame, m.cfg.Icons)+" "+label), width)
 }
 

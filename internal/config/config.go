@@ -52,6 +52,10 @@ type Config struct {
 	GitHub struct {
 		Token string `toml:"token"`
 	} `toml:"github"`
+	GitLab struct {
+		Host  string `toml:"host"`
+		Token string `toml:"token"`
+	} `toml:"gitlab"`
 	Handoff struct {
 		TokenBudget int `toml:"token_budget"`
 	} `toml:"handoff"`
@@ -119,6 +123,9 @@ func merge(dst, src map[string]any) {
 }
 
 func (c Config) Validate() error {
+	if c.GitLab.Host != "" && (strings.ContainsAny(c.GitLab.Host, "/:@ \\?#") || strings.EqualFold(c.GitLab.Host, "github.com")) {
+		return fmt.Errorf("gitlab.host must be a GitLab hostname")
+	}
 	if err := c.validatePresentation(); err != nil {
 		return err
 	}

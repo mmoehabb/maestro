@@ -61,3 +61,8 @@ resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"
 
 [handoff]
 token_budget = 6000
+
+# GitLab.com is detected automatically. Set host for a self-hosted instance.
+[gitlab]
+host = ""
+token = ""

@@ -20,6 +20,20 @@ builds:
       - -X github.com/mmoehabb/maestro/internal/version.Version={{ .Version }}
       - -X github.com/mmoehabb/maestro/internal/version.Commit={{ .ShortCommit }}
       - -X github.com/mmoehabb/maestro/internal/version.Date={{ .Date }}
+  - id: maestrod
+    main: ./cmd/maestrod
+    binary: maestrod
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/mmoehabb/maestro/internal/version.Version={{ .Version }}
+      - -X github.com/mmoehabb/maestro/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/mmoehabb/maestro/internal/version.Date={{ .Date }}
 
 archives:
   - id: default

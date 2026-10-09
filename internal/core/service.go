@@ -17,6 +17,7 @@ import (
 )
 
 type TaskService struct {
+	Remote   Caller
 	Forge    forge.Provider
 	DataDir  string
 	Config   config.Config
@@ -53,6 +54,11 @@ func Slug(title string) string {
 // Create serializes mutations with the future TUI's project lock. Listing does
 // not acquire it, and remains available while a writer owns the project.
 func (s *TaskService) Create(ctx context.Context, in NewTask) (store.Task, error) {
+	if s.Remote != nil {
+		var t store.Task
+		err := s.Remote.Call(ctx, "create", Request{New: in}, &t)
+		return t, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.lock != nil {

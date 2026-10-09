@@ -13,16 +13,17 @@
      Switch agent  [ctrl+b a]
      Task history  [ctrl+b h]
      Edit task notes  [ctrl+b n]
+     Rename task title  [ctrl+b ,]
      Stop agent and save portable checkpoint  [ctrl+b C]
      Copy manual handoff instruction  [ctrl+b H] — No manual handoff instruction
      View diff against base  [ctrl+b D]
      Toggle tabs / sidebar  [ctrl+b s]
      Choose color theme  [ctrl+b T]
      Help  [ctrl+b ?]
-     Sign in to GitHub  [ctrl+b g]
+     Sign in to Git host  [ctrl+b g]
      Push branch  [ctrl+b p]
-     Create / open pull request  [ctrl+b P]
-     Merge pull request  [ctrl+b m]
+     Create / open pull or merge request  [ctrl+b P]
+     Merge pull or merge request  [ctrl+b m]
      Archive / clean up worktree  [ctrl+b &]
      Reopen archived task  [ctrl+b u]
      Hide tab (preserve worktree)  [ctrl+b d]
@@ -33,13 +34,12 @@
      Open editor  [ctrl+b e]
      Open shell in worktree  [ctrl+b t]
      Suspend Maestro  [ctrl+b z]
-     Quit and save sessions  [ctrl+b q]
+     Detach (keep agents running)  [ctrl+b q]
      Task:  · fix-auth · codex
      Task:  · add-tui · codex
      Task:  · refactor · codex
    
-   28 matches · ↑/↓ select · Enter run · Esc cancel
-   
+   29 matches · ↑/↓ select · Enter run · Esc cancel
    
 
    ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -40,7 +40,7 @@ func TestWriteAndSymlinkRefusal(t *testing.T) {
 	if err := Write(dir, "second"); err != nil {
 		t.Fatal(err)
 	}
-	p := filepath.Join(dir, ".maestro", "handoff.md")
+	p := filepath.Join(dir, ".maestro", "local", "handoff.md")
 	b, err := os.ReadFile(p)
 	if err != nil || string(b) != "second" {
 		t.Fatal(string(b), err)

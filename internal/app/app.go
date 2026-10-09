@@ -13,6 +13,19 @@ import (
 )
 
 func Open(ctx context.Context, dir string, paths config.Paths) (*core.TaskService, error) {
+	s, err := OpenLocal(ctx, dir, paths)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.DiscoverTasks(ctx); err != nil {
+		_ = s.Store.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// OpenLocal bypasses discovery so conflicting checkpoints can be reconciled.
+func OpenLocal(ctx context.Context, dir string, paths config.Paths) (*core.TaskService, error) {
 	repo, err := git.Discover(ctx, dir)
 	if err != nil {
 		return nil, err

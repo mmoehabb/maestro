@@ -57,7 +57,7 @@ explicit fresh start (`prefix R`) rather than silently abandoning its session.
 
 ## Handoffs and manual prompts
 
-Switching agents writes `.maestro/handoff.md` with the goal, notes, conversation,
+Switching agents writes `.maestro/local/handoff.md` with the goal, notes, conversation,
 and Git state. Both `new` and `resume` templates should pass `{{.Prompt}}` so
 Maestro can deliver the handoff instruction. It validates the rendered arguments
 before stopping the current agent.

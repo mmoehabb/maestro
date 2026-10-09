@@ -45,6 +45,10 @@ func (r Repo) PRBase(ctx context.Context, base string) (string, error) {
 }
 
 func (r Repo) ValidateWorktree(ctx context.Context, path, branch string) error {
+	return r.validateCheckout(ctx, path, branch, false)
+}
+
+func (r Repo) validateCheckout(ctx context.Context, path, branch string, allowMain bool) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
@@ -68,7 +72,7 @@ func (r Repo) ValidateWorktree(ctx context.Context, path, branch string) error {
 	if err != nil {
 		return err
 	}
-	if root != expected || root == main {
+	if root != expected || (!allowMain && root == main) {
 		return fmt.Errorf("refusing cleanup outside the task's linked worktree")
 	}
 	common, err := run(ctx, path, "rev-parse", "--path-format=absolute", "--git-common-dir")

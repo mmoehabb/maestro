@@ -11,14 +11,14 @@
     Switch agent  [ctrl+b a]
     Task history  [ctrl+b h]
     Edit task notes  [ctrl+b n]
+    Stop agent and save portable checkpoint  [ctrl+b C]
     Copy manual handoff instruction  [ctrl+b H] — No manual handoff instructi…
     View diff against base  [ctrl+b D]
     Toggle tabs / sidebar  [ctrl+b s]
     Choose color theme  [ctrl+b T]
     Help  [ctrl+b ?]
-    Sign in to GitHub  [ctrl+b g]
   
-  27 matches · ↑/↓ select · Enter run · Esc cancel
+  28 matches · ↑/↓ select · Enter run · Esc cancel
   ────────────────────────────────────────────────────────────────────────────
   maestro/fix-auth                                             +0 −0 · 0 files
   alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

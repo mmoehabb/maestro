@@ -13,6 +13,7 @@
      Switch agent  [ctrl+b a]
      Task history  [ctrl+b h]
      Edit task notes  [ctrl+b n]
+     Stop agent and save portable checkpoint  [ctrl+b C]
      Copy manual handoff instruction  [ctrl+b H] — No manual handoff instruction
      View diff against base  [ctrl+b D]
      Toggle tabs / sidebar  [ctrl+b s]
@@ -37,8 +38,7 @@
      Task:  · add-tui · codex
      Task:  · refactor · codex
    
-   27 matches · ↑/↓ select · Enter run · Esc cancel
-   
+   28 matches · ↑/↓ select · Enter run · Esc cancel
    
    
 

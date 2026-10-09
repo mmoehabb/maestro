@@ -61,6 +61,18 @@ func (s *TaskService) archive(ctx context.Context, task store.Task, cleanup, for
 		return task, err
 	}
 	if cleanup {
+		p, err := s.Store.Portable(ctx, task.ID)
+		if err != nil {
+			return task, err
+		}
+		if p.Checkpoint.ID != "" && !task.CleanupPending {
+			if !p.Checkpoint.Archived {
+				return task, fmt.Errorf("archive this portable task first, then checkpoint, commit and push its archived status before cleanup")
+			}
+			if err = s.checkpointReady(ctx, task); err != nil {
+				return task, err
+			}
+		}
 		_, statErr := os.Lstat(task.Worktree)
 		if statErr != nil && !os.IsNotExist(statErr) {
 			return task, statErr
@@ -121,6 +133,28 @@ func (s *TaskService) reopen(ctx context.Context, task store.Task) (store.Task, 
 	if task.Lifecycle != "archived" && !task.CleanupPending {
 		return task, nil
 	}
+	p, err := s.Store.Portable(ctx, task.ID)
+	if err != nil {
+		return task, err
+	}
+	completed := task.PRState == "merged" || task.PRState == "closed"
+	_, checkoutErr := os.Lstat(task.Worktree)
+	if p.SourceCommit != "" && !task.CleanupPending && (!completed || checkoutErr == nil) {
+		if err = s.ensurePortableWorktree(ctx, task); err != nil {
+			return task, err
+		}
+		if completed {
+			task.PRNumber = 0
+			task.PRURL = ""
+			task.PRState = ""
+			task.PRHeadSHA = ""
+			task.MergeSHA = ""
+			task.CIState = ""
+			task.ReviewState = ""
+		}
+		task.Lifecycle = "active"
+		return s.Store.SaveReopened(ctx, task)
+	}
 	// A completed PR belongs to the previous task cycle. Its URL remains in the
 	// timeline; a cleaned worktree starts its new cycle on a fresh branch.
 	if task.Lifecycle != "archived" {
@@ -176,5 +210,10 @@ func (s *TaskService) reopen(ctx context.Context, task store.Task) (store.Task, 
 		task.Lifecycle = "pr_open"
 	}
 	task.CleanupPending = false
-	return s.Store.SaveReopened(ctx, task)
+	result, err := s.Store.SaveReopened(ctx, task)
+	if err == nil && p.Checkpoint.ID != "" {
+		p.SourceCommit, p.SourceRef = "", ""
+		err = s.Store.SavePortable(ctx, task.ID, p)
+	}
+	return result, err
 }

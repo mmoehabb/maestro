@@ -12,9 +12,9 @@ func Context(ctx context.Context, path, base string) (string, error) {
 		title string
 		args  []string
 	}{
-		{"Commits", []string{"log", "--oneline", base + "..HEAD", "--"}},
-		{"Changes against base", []string{"diff", "--stat", base, "--"}},
-		{"Uncommitted files", []string{"status", "--short"}},
+		{"Commits", []string{"log", "--oneline", base + "..HEAD", "--", ".", ":(exclude).maestro"}},
+		{"Changes against base", []string{"diff", "--stat", base, "--", ".", ":(exclude).maestro"}},
+		{"Uncommitted files", []string{"status", "--short", "--", ".", ":(exclude).maestro"}},
 	} {
 		out, err := run(ctx, path, q.args...)
 		if err != nil {

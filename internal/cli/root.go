@@ -40,6 +40,8 @@ func NewRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		newSwitchCmd(),
 		newHistoryCmd(),
 		newNotesCmd(),
+		newCheckpointCmd(),
+		newRestoreCmd(),
 		newForgeCmd("push"),
 		newForgeCmd("pr"),
 		newForgeCmd("merge"),

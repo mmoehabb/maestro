@@ -21,6 +21,7 @@ var actions = []action{
 	{"a", "Switch agent", true},
 	{"h", "Task history", true},
 	{"n", "Edit task notes", true},
+	{"C", "Stop agent and save portable checkpoint", true},
 	{"H", "Copy manual handoff instruction", true},
 	{"D", "View diff against base", true},
 	{"s", "Toggle tabs / sidebar", false},
@@ -91,6 +92,8 @@ func (m *Model) dispatch(key string) tea.Cmd {
 		return m.openHistory()
 	case "n":
 		return m.openNotes()
+	case "C":
+		return m.checkpoint()
 	case "H":
 		if m.manualInstruction != "" {
 			return tea.SetClipboard(m.manualInstruction)

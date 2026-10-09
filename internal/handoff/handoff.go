@@ -2,24 +2,26 @@
 package handoff
 
 import (
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/mmoehabb/maestro/internal/portable"
 	"github.com/mmoehabb/maestro/internal/store"
 )
 
 // Prompt returns the instruction for the agent to read the handoff file.
 func Prompt(worktree string) string {
-	return fmt.Sprintf("Read %s first. Continue this task using its goal, notes, conversation and Git state.", filepath.Join(worktree, ".maestro", "handoff.md"))
+	return fmt.Sprintf("Read %s first. Continue this task using its goal, notes, conversation and Git state.", filepath.Join(worktree, ".maestro", "local", "handoff.md"))
 }
 
 // Estimate conservatively budgets one token per UTF-8 byte. It is deterministic
 // across agents, and deliberately leaves room for tokenizer differences.
 func Estimate(s string) int { return len(s) }
+
+// Limit applies the local budget to a checkpoint produced on another machine.
+func Limit(s string, budget int) string { return clip(s, budget) }
 
 func clip(s string, n int) string {
 	if n <= 0 {
@@ -149,42 +151,17 @@ func Build(h store.History, gitState, target string, budget int) string {
 	return clip(out.String(), budget)
 }
 
-// Write refuses symlink paths and installs a private file using an atomic rename.
+// WithPrevious preserves imported conversation when local history is empty.
+func WithPrevious(h store.History, state, target string, budget int, previous string) string {
+	if budget <= 0 {
+		return ""
+	}
+	const heading = "\n## Previous checkpoint context\n"
+	old := clip(heading, budget/2) + clipRecent(previous, max(0, budget/2-len(heading)))
+	return Build(h, state, target, budget-len(old)) + old
+}
+
+// Write keeps launch-time context separate from the committed checkpoint.
 func Write(worktree, content string) error {
-	dir := filepath.Join(worktree, ".maestro")
-	if st, err := os.Lstat(dir); err == nil {
-		if st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
-			return errors.New(".maestro must be a real directory")
-		}
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	path := filepath.Join(dir, "handoff.md")
-	if st, err := os.Lstat(path); err == nil {
-		if !st.Mode().IsRegular() {
-			return errors.New("handoff.md must be a regular file")
-		}
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	f, err := os.CreateTemp(dir, ".handoff-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.WriteString(content); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path)
+	return portable.WriteFile(worktree, filepath.Join(".maestro", "local", "handoff.md"), []byte(content))
 }

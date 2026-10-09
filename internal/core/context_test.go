@@ -214,7 +214,7 @@ func TestTaskBasePreservesGitContext(t *testing.T) {
 				t.Fatal(err)
 			}
 			awaitPane(t, p, term.Done, "ready agy new")
-			brief, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
+			brief, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "local", "handoff.md"))
 			if err != nil || !strings.Contains(string(brief), "implement-base-context-task") || !strings.Contains(string(brief), "base-fix.txt") {
 				t.Fatal("handoff lost committed Git context", string(brief), err)
 			}
@@ -251,7 +251,7 @@ func TestContextSwitchResumeAndHistorySurvivesDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitPane(t, p, term.Done, "ready agy new")
-	b, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
+	b, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "local", "handoff.md"))
 	if err != nil || !strings.Contains(string(b), "login fix") {
 		t.Fatal("context missing", string(b), err)
 	}
@@ -335,7 +335,7 @@ func TestSwitchPreflightAndPendingRecovery(t *testing.T) {
 	}
 	// A filesystem failure occurs after the outgoing process stops. The persisted
 	// pending handoff must survive and be consumed on retry without losing context.
-	dir := filepath.Join(task.Worktree, ".maestro")
+	dir := filepath.Join(task.Worktree, ".maestro", "local")
 	if err = os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +504,7 @@ func TestFreshRestartPreservesPendingContext(t *testing.T) {
 			if !strings.Contains(strings.ReplaceAll(strings.Join(p.Scrollback(), ""), "\n", ""), "handoff.md first") {
 				t.Fatal("fresh agent did not receive handoff instruction")
 			}
-			content, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
+			content, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "local", "handoff.md"))
 			if err != nil || !strings.Contains(string(content), "Final context saved on stop.") {
 				t.Fatal("fresh handoff lost final output", string(content), err)
 			}
@@ -526,7 +526,7 @@ func TestPendingHandoffRetryUsesCurrentContext(t *testing.T) {
 				t.Fatal(err)
 			}
 			awaitPane(t, p, term.Done, "ready codex new")
-			path := filepath.Join(task.Worktree, ".maestro", "handoff.md")
+			path := filepath.Join(task.Worktree, ".maestro", "local", "handoff.md")
 			if err = os.MkdirAll(path, 0o700); err != nil {
 				t.Fatal(err)
 			}
@@ -696,7 +696,7 @@ func TestMalformedHistoryKeepsTerminalHandoff(t *testing.T) {
 	if h.Sessions[0].NativeComplete {
 		t.Fatal("partial import marked complete")
 	}
-	b, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
+	b, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "local", "handoff.md"))
 	if err != nil || !strings.Contains(string(b), "[terminal") || !strings.Contains(string(b), "working") || !strings.Contains(string(b), "The login fix is complete.") {
 		t.Fatal(string(b), err)
 	}
@@ -844,7 +844,7 @@ func TestNotesPersistAndReachNextAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitPane(t, p, term.Done, "ready agy new")
-	content, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "handoff.md"))
+	content, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "local", "handoff.md"))
 	if err != nil || !strings.Contains(string(content), notes) {
 		t.Fatal("notes missing from handoff", string(content), err)
 	}

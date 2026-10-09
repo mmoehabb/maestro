@@ -85,6 +85,7 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix h` | Task timeline and expandable conversation history |
 | `prefix H` | Copy the handoff instruction for manual-prompt agents |
 | `prefix n` | Edit task notes (Ctrl+S saves, Esc cancels) |
+| `prefix C` | Stop the agent and save a portable task checkpoint |
 | `prefix c` | New task: title, base branch, agent and prompt |
 | `prefix d` | Hide the current tab and stop its agent |
 | `prefix g` | Sign in to GitHub |
@@ -278,12 +279,84 @@ Data lives in the platform's XDG data directory under `maestro`: `maestro.db`, `
 
 `worktree.copy` copies regular files only, skips missing files, and rejects symlinks, traversal, Git metadata and existing destinations. Copied files have owner-only permissions. `worktree.setup` runs trusted shell commands from your config in each new worktree (`sh` on Unix, `cmd` on Windows). Review repository config before using it. If initial copying, setup or database persistence fails after worktree creation, Maestro retains the checkout and reports its path and branch. Inspect and recover it manually before retrying creation; failed initial provisioning is not listed as a saved task. Reopen provisioning retains the archived task and saves progress for retry.
 
+### Continue a task on another machine
+
+Publish a checkpoint with the task branch to carry its goal, notes, preferred
+agent, archive status, and bounded conversation context through Git:
+
+```sh
+maestro checkpoint fix-login
+# In the task checkout, review the checkpoint and code before publishing:
+git add .maestro/.gitignore .maestro/tasks
+git commit -m "chore: checkpoint task context"
+git push -u origin HEAD
+```
+
+Commit your code changes as well. In the TUI, `prefix C` (or “Stop agent and save
+portable checkpoint” in the palette) stops the agent, saves its final history,
+and writes the checkpoint. Use `prefix r` to resume locally. The CLI checkpoint
+command requires the TUI to be closed. Checkpointing never stages, commits, or
+pushes files automatically. Once a task has a checkpoint, Maestro's push/PR
+commands reject stale or uncommitted context; checkpoint and commit again after
+changing notes or running another session.
+
+On another machine, install Maestro and your preferred agent, authenticate the
+agent, then clone the repository or run `git fetch origin` in an existing clone.
+Run `maestro ls` to discover tasks and `maestro open fix-login` to continue.
+Fetched task branches are sufficient: Maestro imports their committed metadata
+and creates local worktrees when launching them. If the task branch is already
+checked out, that checkout is reused, including the main checkout. Existing
+checkouts are never reset or silently pulled; update a checkout with Git when
+its checkpoint differs from the selected one. Discovery does not run worktree
+setup scripts or copy private files; prepare dependencies and local
+configuration as needed.
+
+Checkpoints live in `.maestro/tasks/<uuid>/task.json` and `handoff.md` at the
+root of the task branch's checkout. Only branches that carry their own task
+manifest are discovered; merged copies on unrelated branches are ignored.
+Fetching one task branch recovers that task; fetch all relevant branches to
+recover all published tasks. Remote branches must remain available for recovery.
+
+SQLite, locks, native agent sessions, credentials, and full raw transcripts stay
+local. Continuation on a new machine uses a **fresh agent session with the saved
+handoff**, not the old agent's native session. Uncommitted/unpushed work and
+history after the last published checkpoint are not transferred. Review the
+handoff before committing: conversation and terminal excerpts can contain
+private information. The handoff uses the configured token budget and can omit
+older context; goal and notes are also retained separately in the manifest.
+
+Repeated discovery is idempotent. Local edits or conflicting checkpoints produce
+an actionable error instead of overwriting context. Use
+`maestro restore origin/fix-login --replace` to explicitly choose a fetched
+branch's checkpoint. Maestro remembers that choice when branches diverge and
+preserves local history and Git files. A local checkout with the same committed
+checkpoint can continue on its own code; a different checkpoint requires Git
+reconciliation before launch. `maestro checkpoint` remains available during
+discovery conflicts so you can preserve local context first. After renaming a
+task's branch with Git in its existing checkout, run
+`maestro checkpoint fix-login --branch new-name` to
+adopt the name and update its manifest. Maestro does not guess ownership of
+inherited manifests.
+
+Archive/reopen status travels only after a new checkpoint is committed and
+pushed. To clean up a portable task, archive it, checkpoint the archived status,
+commit and push using Git, then run `maestro archive fix-login --cleanup`.
+Maestro refuses cleanup of unpublished context. The main checkout cannot be
+removed by task cleanup. `maestro rm` suppresses automatic rediscovery of that
+task in the current local database; explicit `maestro restore <ref>` can recover
+it again. Removing a remote branch never deletes local task records.
+
+Existing tasks become portable on their first checkpoint. Maestro migrates its
+own legacy Git exclusion while retaining unrelated ignore rules. Files such as
+legacy `.maestro/session-id` remain local. If your own `.gitignore` excludes all
+of `.maestro/`, adjust that rule to permit `.maestro/tasks/` and `.maestro/.gitignore`.
+
 ### Context handoff and history
 
 Use `prefix a` to choose an installed agent; the picker marks agents that previously
 worked on the task. Switching away from an active or approval-waiting agent asks
 before interruption. Maestro stops the old process, saves its final transcript,
-and writes `.maestro/handoff.md` in the same worktree before launching the new
+and writes `.maestro/local/handoff.md` in the same worktree before launching the new
 agent. Returning to an agent resumes that agent's own native session ID.
 
 `maestro switch <task> -a <agent>` opens the focused TUI, restores other task tabs,

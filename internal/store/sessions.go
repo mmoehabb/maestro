@@ -55,6 +55,9 @@ func (s *Store) StartSession(ctx context.Context, task Task, nativeID string, st
 		}
 	}
 	var handoffID int64
+	if _, err := tx.ExecContext(ctx, "UPDATE portable_tasks SET fresh=0 WHERE task_id=?", task.ID); err != nil {
+		return session, err
+	}
 	err = tx.QueryRowContext(ctx, `SELECT id,COALESCE(from_session,0) FROM handoffs WHERE task_id=? AND agent=? AND delivered_at IS NULL`, task.ID, task.Agent).Scan(&handoffID, &session.HandoffFrom)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return session, err

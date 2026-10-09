@@ -112,6 +112,51 @@ func TestConcurrentOpen(t *testing.T) {
 	wg.Wait()
 }
 
+func TestPortableRefMigrationFromVersionSix(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "maestro.db")
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := s.EnsureProject(ctx, Project{Root: "/test/portable", DefaultBranch: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := s.CreateTask(ctx, Task{ProjectID: project.ID, Slug: "task", Title: "Task", Agent: "fake", Branch: "task", BaseBranch: "main", Worktree: "/test/worktree"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.ExecContext(ctx, `INSERT INTO portable_tasks(task_id,uuid,manifest,context) VALUES(?,?,?,'saved context')`, task.ID, "stable-id", "{}"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.ExecContext(ctx, "ALTER TABLE portable_tasks DROP COLUMN pinned_ref"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.ExecContext(ctx, "PRAGMA user_version=6"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal("version six database did not upgrade", err)
+	}
+	defer s.Close()
+	ref, err := s.PinnedPortableRef(ctx, project.ID, "stable-id")
+	if err != nil || ref != "" {
+		t.Fatal("migration lost portable task", ref, err)
+	}
+	if _, err = s.db.ExecContext(ctx, "UPDATE portable_tasks SET pinned_ref='refs/remotes/origin/task' WHERE task_id=?", task.ID); err != nil {
+		t.Fatal(err)
+	}
+	ref, err = s.PinnedPortableRef(ctx, project.ID, "stable-id")
+	if err != nil || ref != "refs/remotes/origin/task" {
+		t.Fatal("migrated ref unreadable", ref, err)
+	}
+}
+
 func TestOpenWALContention(t *testing.T) {
 	for _, cancelOpen := range []bool{false, true} {
 		name := "released"

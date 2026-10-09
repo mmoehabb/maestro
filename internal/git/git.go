@@ -201,7 +201,7 @@ func (r Repo) excludeHandoff() error {
 		return err
 	}
 	for _, line := range strings.Split(string(b), "\n") {
-		if strings.TrimSpace(line) == "/.maestro/" {
+		if strings.TrimSpace(line) == "/.maestro/" || strings.TrimSpace(line) == "/.maestro/*" {
 			return nil
 		}
 	}
@@ -212,7 +212,7 @@ func (r Repo) excludeHandoff() error {
 	if err != nil {
 		return err
 	}
-	_, writeErr := io.WriteString(f, "\n# Maestro task handoffs\n/.maestro/\n")
+	_, writeErr := io.WriteString(f, "\n# Maestro local task files\n/.maestro/*\n!/.maestro/tasks/\n!/.maestro/.gitignore\n")
 	closeErr := f.Close()
 	if writeErr != nil {
 		return writeErr

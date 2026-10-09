@@ -158,6 +158,14 @@ func (r *Runtime) start(operation context.Context, task store.Task, cols, rows i
 	if err := operation.Err(); err != nil {
 		return nil, err
 	}
+	if err := r.Service.ensurePortableWorktree(operation, task); err != nil {
+		return nil, err
+	}
+	portableState, err := r.Service.Store.Portable(operation, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	fresh = fresh || portableState.Fresh
 	if old := r.entry(task.ID); old != nil {
 		old.pane.Stop()
 		<-old.finished
@@ -374,12 +382,15 @@ func (r *Runtime) prepareHandoff(ctx context.Context, task store.Task, from int6
 		return "", err
 	}
 	gitCtx, stopGit := context.WithTimeout(ctx, 5*time.Second)
-	state, err := git.Context(gitCtx, task.Worktree, task.BaseBranch)
-	stopGit()
+	defer stopGit()
+	p, err := r.Service.Store.Portable(ctx, task.ID)
 	if err != nil {
 		return "", err
 	}
-	content := handoff.Build(history, state, task.Agent, r.Service.Config.Handoff.TokenBudget)
+	content, err := r.Service.continuation(gitCtx, history, p)
+	if err != nil {
+		return "", err
+	}
 	if err = r.Service.Store.PrepareHandoff(ctx, task.ID, from, task.Agent, content); err != nil {
 		return "", err
 	}

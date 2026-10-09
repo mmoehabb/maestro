@@ -83,11 +83,14 @@ func (s *TaskService) workflow(ctx context.Context, task store.Task, action stri
 		return task, fmt.Errorf("task is archived or cleanup is incomplete; reopen or finish cleanup first")
 	}
 	if action == "push" || action == "pr" || action == "merge" {
-		if err := s.Repo.ValidateWorktree(ctx, task.Worktree, task.Branch); err != nil {
+		if err := s.Repo.ValidateTaskCheckout(ctx, task.Worktree, task.Branch); err != nil {
 			return task, err
 		}
 	}
 	if action == "push" {
+		if err := s.checkpointReady(ctx, task); err != nil {
+			return task, err
+		}
 		if task.Lifecycle == "merged" || task.Lifecycle == "closed" {
 			return task, fmt.Errorf("archive and reopen this completed task before pushing new work")
 		}
@@ -137,6 +140,9 @@ func (s *TaskService) workflow(ctx context.Context, task store.Task, action stri
 		}
 	case "pr":
 		if pr == nil {
+			if err := s.checkpointReady(ctx, task); err != nil {
+				return task, err
+			}
 			in, e := s.PRDescription(ctx, task, opts.Base)
 			if e != nil {
 				return task, e
@@ -238,6 +244,9 @@ func (s *TaskService) savePR(ctx context.Context, task store.Task, pr *forge.PR)
 func (s *TaskService) PRDescription(ctx context.Context, task store.Task, base string) (forge.NewPR, error) {
 	if base == "" {
 		base = task.PRBase
+	}
+	if base == "" {
+		base = s.portablePRBase(ctx, task)
 	}
 	if base == "" {
 		var err error

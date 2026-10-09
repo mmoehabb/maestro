@@ -219,6 +219,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case notesSavedMsg:
 		m.notesSaved(msg)
+	case checkpointMsg:
+		for i := range m.tabs {
+			if m.tabs[i].task.ID == msg.id {
+				m.tabs[i].pending = false
+			}
+		}
+		if msg.err != nil {
+			m.notify(msg.err.Error())
+		} else {
+			m.notify("Checkpoint saved. Review, commit and push .maestro/tasks; restart the agent with prefix r.")
+		}
 	case tea.WindowSizeMsg:
 		m.dragID = 0
 		m.dragMoved = false

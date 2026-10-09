@@ -51,6 +51,10 @@ func (s *Store) DeleteArchived(ctx context.Context, id int64) error {
 	if state != "archived" {
 		return fmt.Errorf("task must be archived before deletion")
 	}
+	if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO portable_deleted(project_id,uuid)
+	SELECT t.project_id,p.uuid FROM tasks t JOIN portable_tasks p ON p.task_id=t.id WHERE t.id=?`, id); err != nil {
+		return err
+	}
 	for _, query := range []string{
 		"DELETE FROM handoffs WHERE task_id=?",
 		"DELETE FROM turns WHERE session_id IN (SELECT id FROM agent_sessions WHERE task_id=?)",

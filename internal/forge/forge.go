@@ -34,21 +34,21 @@ func remoteURL(remote string) (*url.URL, error) {
 	return u, nil
 }
 
-// ParseRemote includes an explicitly configured self-hosted GitLab hostname.
-func ParseRemote(remote string, gitlabHosts ...string) (Repo, error) {
+// ParseRemote accepts standard hosts (GitHub, GitLab, Codeberg) or explicitly configured hosts.
+func ParseRemote(remote string, extraHosts ...string) (Repo, error) {
 	u, err := remoteURL(remote)
 	if err != nil {
 		return Repo{}, err
 	}
 	host := strings.ToLower(u.Hostname())
-	allowed := host == "github.com" || host == "gitlab.com"
-	for _, configured := range gitlabHosts {
+	allowed := host == "github.com" || host == "gitlab.com" || host == "codeberg.org"
+	for _, configured := range extraHosts {
 		if configured != "" && strings.EqualFold(host, configured) {
 			allowed = true
 		}
 	}
 	if !allowed {
-		return Repo{}, fmt.Errorf("origin must identify GitHub, GitLab, or the configured gitlab.host")
+		return Repo{}, fmt.Errorf("origin must identify GitHub, GitLab, Codeberg, or a configured forge host")
 	}
 	parts := strings.Split(strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git"), "/")
 	if len(parts) < 2 || (host == "github.com" && len(parts) != 2) {

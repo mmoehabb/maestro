@@ -17,6 +17,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
 	"github.com/mmoehabb/maestro/internal/forge"
+	"github.com/mmoehabb/maestro/internal/forge/codeberg"
 	"github.com/mmoehabb/maestro/internal/forge/github"
 	"github.com/mmoehabb/maestro/internal/forge/gitlab"
 	"github.com/mmoehabb/maestro/internal/git"
@@ -367,7 +368,7 @@ func (m *Model) applyTask(task store.Task) {
 func openBrowser(raw string, hosts ...string) tea.Cmd {
 	return func() tea.Msg {
 		u, err := url.Parse(raw)
-		allowed := err == nil && (u.Hostname() == "github.com" || u.Hostname() == "gitlab.com")
+		allowed := err == nil && (u.Hostname() == "github.com" || u.Hostname() == "gitlab.com" || u.Hostname() == "codeberg.org")
 		if err == nil {
 			for _, host := range hosts {
 				if host != "" && strings.EqualFold(u.Hostname(), host) {
@@ -456,10 +457,16 @@ func (m *Model) queueCleanup(task store.Task) {
 type githubLoginMsg struct{ err error }
 
 func (m *Model) loginGitHub() tea.Cmd {
-	cmd, err := github.LoginCommand(context.Background())
 	host := forge.RemoteHost(m.service.Repo.Remote)
-	if host == "gitlab.com" || (m.cfg.GitLab.Host != "" && host == m.cfg.GitLab.Host) {
+	var cmd *exec.Cmd
+	var err error
+	switch {
+	case host == "gitlab.com" || (m.cfg.GitLab.Host != "" && host == m.cfg.GitLab.Host):
 		cmd, err = gitlab.LoginCommand(context.Background(), host)
+	case host == "codeberg.org" || (m.cfg.Codeberg.Host != "" && host == m.cfg.Codeberg.Host):
+		cmd, err = codeberg.LoginCommand(context.Background(), host)
+	default:
+		cmd, err = github.LoginCommand(context.Background())
 	}
 	if err != nil {
 		m.notify(err.Error())

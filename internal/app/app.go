@@ -12,6 +12,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/config"
 	"github.com/mmoehabb/maestro/internal/core"
 	"github.com/mmoehabb/maestro/internal/forge"
+	"github.com/mmoehabb/maestro/internal/forge/codeberg"
 	"github.com/mmoehabb/maestro/internal/forge/github"
 	"github.com/mmoehabb/maestro/internal/forge/gitlab"
 	"github.com/mmoehabb/maestro/internal/git"
@@ -56,6 +57,8 @@ func OpenLocal(ctx context.Context, dir string, paths config.Paths) (*core.TaskS
 	host := forge.RemoteHost(repo.Remote)
 	if host == "gitlab.com" || (cfg.GitLab.Host != "" && strings.EqualFold(host, cfg.GitLab.Host)) {
 		provider = gitlab.New(host, cfg.GitLab.Token)
+	} else if host == "codeberg.org" || (cfg.Codeberg.Host != "" && strings.EqualFold(host, cfg.Codeberg.Host)) {
+		provider = codeberg.New(host, cfg.Codeberg.Token)
 	}
 	service := &core.TaskService{
 		Forge: provider, DataDir: paths.DataDir,

@@ -17,6 +17,8 @@ func (m *Model) checkpoint() tea.Cmd {
 	}
 	t := &m.tabs[m.active]
 	t.pending = true
+	t.pendingHandoff = ""
+	t.pendingHandoffFresh = false
 	task := t.task
 	return func() tea.Msg {
 		_, err := m.runtime.Checkpoint(context.Background(), task)

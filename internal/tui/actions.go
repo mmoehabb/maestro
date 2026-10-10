@@ -141,6 +141,8 @@ func (m *Model) dispatch(key string) tea.Cmd {
 		if len(m.tabs) > 0 && !m.tabs[m.active].pending {
 			t := &m.tabs[m.active]
 			t.pending = true
+			t.pendingHandoff = ""
+			t.pendingHandoffFresh = false
 			task := t.task
 			return func() tea.Msg { return archivedMsg{task.ID, m.runtime.Archive(context.Background(), task)} }
 		}
@@ -148,6 +150,8 @@ func (m *Model) dispatch(key string) tea.Cmd {
 		if len(m.tabs) > 0 && !m.tabs[m.active].pending {
 			t := &m.tabs[m.active]
 			t.pending = true
+			t.pendingHandoff = ""
+			t.pendingHandoffFresh = false
 			id := t.task.ID
 			return func() tea.Msg { m.runtime.Stop(id); return stoppedMsg{id} }
 		}

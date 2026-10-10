@@ -81,9 +81,16 @@ func (m *Model) openSwitch() tea.Cmd {
 }
 
 func (m *Model) switchTask(task store.Task, target string, confirmed bool) tea.Cmd {
+	fresh := m.switcher != nil && m.switcher.fresh
+	return m.switchTaskPending(task, target, confirmed, fresh)
+}
+
+func (m *Model) switchTaskPending(task store.Task, target string, confirmed bool, fresh bool) tea.Cmd {
 	for i := range m.tabs {
 		if m.tabs[i].task.ID == task.ID {
 			m.tabs[i].pending = true
+			m.tabs[i].pendingHandoff = ""
+			m.tabs[i].pendingHandoffFresh = false
 		}
 	}
 	if m.switcher != nil {
@@ -91,7 +98,6 @@ func (m *Model) switchTask(task store.Task, target string, confirmed bool) tea.C
 		m.switcher.err = ""
 	}
 	cols, rows := m.size()
-	fresh := m.switcher != nil && m.switcher.fresh
 	return func() tea.Msg {
 		var p *term.Pane
 		var err error
@@ -106,6 +112,20 @@ func (m *Model) switchTask(task store.Task, target string, confirmed bool) tea.C
 		}
 		return switchedMsg{target: target, id: task.ID, pane: p, task: task, err: err}
 	}
+}
+
+func (m *Model) summarizeAndSwitch(task store.Task, target string, fresh bool) tea.Cmd {
+	for i := range m.tabs {
+		if m.tabs[i].task.ID == task.ID {
+			m.tabs[i].pendingHandoff = target
+			m.tabs[i].pendingHandoffFresh = fresh
+			if m.tabs[i].pane != nil {
+				m.tabs[i].pane.Paste("Please summarize your progress and next steps for the next agent, then exit.\n")
+			}
+		}
+	}
+	m.switcher = nil
+	return nil
 }
 
 func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -128,6 +148,11 @@ func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
 		switch msg.String() {
 		case "y", "enter":
 			return m.switchTask(d.task, d.agents[d.selected], true)
+		case "s":
+			target := d.agents[d.selected]
+			if target != d.task.Agent || d.fresh {
+				return m.summarizeAndSwitch(d.task, target, d.fresh)
+			}
 		case "n", "esc":
 			d.confirm = false
 			d.fresh = false
@@ -163,7 +188,7 @@ func (d *switchDialog) View(width, height int) string {
 			prompt = "No saved session ID. Stop the current agent and start a fresh session with a handoff?"
 		}
 		lines = strings.Split(ansi.Wrap(prompt+"\n\nTarget: "+d.agents[d.selected], width, ""), "\n")
-		footer = "y/Enter confirm · n/Esc cancel"
+		footer = "y/Enter confirm · s summarize · Esc cancel"
 	} else {
 		for i, label := range d.labels {
 			mark := "  "

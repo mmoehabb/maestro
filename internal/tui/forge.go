@@ -62,6 +62,8 @@ func (m *Model) workflow(task store.Task, action string, opts core.WorkflowOptio
 				return nil
 			}
 			m.tabs[i].pending = true
+			m.tabs[i].pendingHandoff = ""
+			m.tabs[i].pendingHandoffFresh = false
 		}
 	}
 	dialog := m.forgeUI

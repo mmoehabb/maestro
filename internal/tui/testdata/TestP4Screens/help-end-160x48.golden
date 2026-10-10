@@ -6,7 +6,6 @@
 
    CODEX / fix-auth                                                                                                                                 ⠋ Working
 
-   
    alt+1…9 select · alt+h/l previous/next
    
    ctrl+b :  Command palette
@@ -19,6 +18,7 @@
    ctrl+b H  Copy manual handoff instruction
    ctrl+b D  View diff against base
    ctrl+b s  Toggle tabs / sidebar
+   ctrl+b f  Toggle fullscreen
    ctrl+b T  Choose color theme
    ctrl+b ?  Help
    ctrl+b g  Sign in to Git host

@@ -82,6 +82,7 @@ The prefix is `ctrl+m` after the terminal confirms keyboard disambiguation, othe
 | `prefix :` | Search actions and tasks |
 | `prefix D` | View diff against the task base |
 | `prefix s` | Toggle tabs / sidebar |
+| `prefix f` | Toggle full-screen agent view |
 | `prefix T` | Preview and save a color theme |
 | `prefix a` | Switch agents with context handoff |
 | `prefix h` | Task timeline and expandable conversation history |

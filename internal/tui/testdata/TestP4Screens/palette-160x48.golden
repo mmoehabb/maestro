@@ -18,6 +18,7 @@
      Copy manual handoff instruction  [ctrl+b H] — No manual handoff instruction
      View diff against base  [ctrl+b D]
      Toggle tabs / sidebar  [ctrl+b s]
+     Toggle fullscreen  [ctrl+b f]
      Choose color theme  [ctrl+b T]
      Help  [ctrl+b ?]
      Sign in to Git host  [ctrl+b g]
@@ -39,8 +40,7 @@
      Task:  · add-tui · codex
      Task:  · refactor · codex
    
-   29 matches · ↑/↓ select · Enter run · Esc cancel
-   
+   30 matches · ↑/↓ select · Enter run · Esc cancel
 
    ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    maestro/fix-auth                                                                                                                           +0 −0 · 0 files

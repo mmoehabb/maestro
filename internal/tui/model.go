@@ -67,21 +67,21 @@ type (
 )
 
 type Model struct {
-	credentials             chan credentialRequest
-	credentialUI            *credentialDialog
-	themes                  *themePicker
-	palette                 *paletteView
-	diff                    *diffView
-	sidebar, light, blurred bool
-	backgroundKnown         bool
-	helpOffset              int
-	dragID                  int64
-	dragMoved               bool
-	orderPending            bool
-	notifier                notify.Notifier
-	notificationFailed      bool
-	observed                map[int64]activityObservation
-	attention               map[int64]time.Time
+	credentials                         chan credentialRequest
+	credentialUI                        *credentialDialog
+	themes                              *themePicker
+	palette                             *paletteView
+	diff                                *diffView
+	sidebar, light, blurred, fullscreen bool
+	backgroundKnown                     bool
+	helpOffset                          int
+	dragID                              int64
+	dragMoved                           bool
+	orderPending                        bool
+	notifier                            notify.Notifier
+	notificationFailed                  bool
+	observed                            map[int64]activityObservation
+	attention                           map[int64]time.Time
 
 	forgeUI                                                   *forgeDialog
 	cleanupQueue                                              []store.Task

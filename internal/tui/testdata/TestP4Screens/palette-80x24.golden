@@ -16,9 +16,9 @@
     Copy manual handoff instruction  [ctrl+b H] — No manual handoff instructi…
     View diff against base  [ctrl+b D]
     Toggle tabs / sidebar  [ctrl+b s]
-    Choose color theme  [ctrl+b T]
+    Toggle fullscreen  [ctrl+b f]
   
-  29 matches · ↑/↓ select · Enter run · Esc cancel
+  30 matches · ↑/↓ select · Enter run · Esc cancel
   ────────────────────────────────────────────────────────────────────────────
   maestro/fix-auth                                             +0 −0 · 0 files
   alt 1–9 switch tabs   ctrl+b a switch agent   ctrl+b ? help                   

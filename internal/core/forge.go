@@ -108,7 +108,7 @@ func (s *TaskService) workflow(ctx context.Context, task store.Task, action stri
 		err := s.Store.SaveWorkflow(ctx, task, "pushed")
 		return task, err
 	}
-	repo, err := forge.ParseRemote(s.Repo.Remote, s.Config.GitLab.Host)
+	repo, err := forge.ParseRemote(s.Repo.Remote, s.Config.GitLab.Host, s.Config.Codeberg.Host)
 	if err != nil {
 		return task, err
 	}

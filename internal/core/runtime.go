@@ -71,7 +71,7 @@ func (s *TaskService) OpenRuntime() (*Runtime, error) {
 	ctx = git.WithCredentialPrompt(ctx, func(context.Context, string) (string, error) {
 		return "", fmt.Errorf("git credentials required; retry the action in Maestro or unlock the SSH key with ssh-add")
 	})
-	pollRepo, pollErr := forge.ParseRemote(s.Repo.Remote, s.Config.GitLab.Host)
+	pollRepo, pollErr := forge.ParseRemote(s.Repo.Remote, s.Config.GitLab.Host, s.Config.Codeberg.Host)
 	r := &Runtime{Service: s, Events: make(chan Event, 128), panes: map[int64]*running{}, locks: map[int64]*sync.Mutex{}, ctx: ctx, cancel: cancel, pollEnabled: pollErr == nil && s.Forge != nil, pollRepo: pollRepo, pollCleanup: s.Config.Git.Cleanup}
 	r.wg.Add(1)
 	go r.poll()

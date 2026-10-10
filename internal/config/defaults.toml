@@ -66,3 +66,8 @@ token_budget = 6000
 [gitlab]
 host = ""
 token = ""
+
+# Codeberg.org is detected automatically. Set host for a self-hosted instance.
+[codeberg]
+host = ""
+token = ""

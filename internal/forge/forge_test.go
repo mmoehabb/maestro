@@ -31,3 +31,16 @@ func TestGitLabRemoteNamespaces(t *testing.T) {
 		t.Fatal("unconfigured host accepted")
 	}
 }
+
+func TestCodebergRemote(t *testing.T) {
+	for _, remote := range []string{"git@codeberg.org:owner/repo.git", "https://codeberg.org/owner/repo.git", "ssh://git@codeberg.org/owner/repo.git"} {
+		repo, err := ParseRemote(remote)
+		if err != nil || repo.Owner != "owner" || repo.Name != "repo" {
+			t.Fatal(repo, err)
+		}
+	}
+	repo, err := ParseRemote("git@forgejo.example:owner/repo.git", "forgejo.example")
+	if err != nil || repo.Owner != "owner" || repo.Name != "repo" {
+		t.Fatal(repo, err)
+	}
+}

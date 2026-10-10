@@ -60,3 +60,38 @@ for (const button of document.querySelectorAll('[data-copy]')) {
     resetTimer = setTimeout(() => { button.textContent = 'Copy'; }, 2500);
   });
 }
+
+// Animate logo marquees only when their content overflows the container.
+function checkMarqueeOverflow(marquee) {
+  const track = marquee.querySelector('.marquee-track:not([aria-hidden="true"])');
+  if (!track) return;
+  const items = track.children;
+  if (!items.length) return;
+
+  const style = window.getComputedStyle(marquee);
+  const gap = parseFloat(style.getPropertyValue('--marquee-gap')) || 48;
+  let naturalWidth = 0;
+  for (let i = 0; i < items.length; i++) {
+    naturalWidth += items[i].offsetWidth;
+  }
+  naturalWidth += (items.length - 1) * gap;
+
+  // Set data-overflow based on container clientWidth vs natural content width
+  const isOverflowing = naturalWidth > (marquee.clientWidth + 1);
+  marquee.setAttribute('data-overflow', String(isOverflowing));
+}
+
+function updateAllMarquees() {
+  document.querySelectorAll('.marquee').forEach(checkMarqueeOverflow);
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+  const marqueeObserver = new ResizeObserver(() => {
+    updateAllMarquees();
+  });
+  document.querySelectorAll('.marquee').forEach((m) => marqueeObserver.observe(m));
+} else {
+  window.addEventListener('resize', updateAllMarquees);
+}
+updateAllMarquees();
+window.addEventListener('load', updateAllMarquees);

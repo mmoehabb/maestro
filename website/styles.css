@@ -40,10 +40,11 @@ nav a { display: inline-flex; align-items: center; min-height: 44px; text-decora
 nav a:hover, .text-link:hover, footer a:hover { color: var(--accent); }
 .nav-github { gap: 1.25rem; border-left: 1px solid var(--line); padding-left: 2rem; }
 /* Keep the decoration after the demo in source order; place it beside the hero on desktop. */
-.opening-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-areas: "hero art" "ensemble ensemble" "demo demo"; column-gap: 2rem; }
+.opening-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-areas: "hero art" "ensemble ensemble" "providers providers" "demo demo"; column-gap: 2rem; }
 .hero { grid-area: hero; padding-block: 88px 76px; }
 .opening-layout > .score-art { grid-area: art; align-self: center; min-width: 0; }
 .opening-layout > .ensemble { grid-area: ensemble; min-width: 0; }
+.opening-layout > .git-providers { grid-area: providers; min-width: 0; }
 .opening-layout > .demo-section { grid-area: demo; min-width: 0; }
 .eyebrow { font-size: .69rem; letter-spacing: .12em; font-weight: 700; text-transform: uppercase; margin: 0 0 24px; }
 .small-note { color: var(--accent); font-size: 1.25rem; margin-right: 9px; vertical-align: middle; }
@@ -65,11 +66,107 @@ h1 em, h2 em { color: var(--accent); font-weight: 400; }
 .score-art svg { width: 100%; height: auto; display: block; overflow: visible; }
 .score-bottom { border-top: 1px solid var(--line); padding-top: 16px; font-size: .76rem; }
 .score-bottom em { font-family: var(--serif); font-size: 1rem; }
-.ensemble { border-block: 1px solid var(--line); padding-block: 25px; display: flex; gap: 36px; align-items: center; }
-.ensemble p { font-size: .72rem; line-height: 1.6; flex-shrink: 0; color: var(--muted); margin: 0; }
-.ensemble strong { color: var(--ink); font-weight: 400; }
-.ensemble ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; flex: 1; justify-content: space-between; gap: 12px 24px; }
-.ensemble li { font-weight: 700; letter-spacing: -.035em; font-size: 1rem; }
+.ensemble { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-block: 22px; display: flex; gap: 36px; align-items: center; overflow: hidden; }
+.git-providers { border-bottom: 1px solid var(--line); padding-block: 18px; display: flex; gap: 36px; align-items: center; overflow: hidden; }
+.ensemble p, .git-providers p { font-size: .75rem; line-height: 1.6; flex-shrink: 0; color: var(--muted); margin: 0; }
+.ensemble strong, .git-providers strong { color: var(--ink); font-weight: 400; }
+.marquee {
+  display: flex;
+  user-select: none;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.marquee:not([data-overflow="true"]) {
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.marquee:not([data-overflow="true"]) .marquee-track {
+  animation: none;
+  width: 100%;
+}
+.ensemble .marquee:not([data-overflow="true"]) .marquee-track {
+  justify-content: space-between;
+}
+.git-providers .marquee:not([data-overflow="true"]) .marquee-track {
+  justify-content: start;
+  gap: var(--marquee-gap, 48px);
+}
+.marquee:not([data-overflow="true"]) .marquee-track[aria-hidden="true"] {
+  display: none !important;
+}
+.marquee[data-overflow="true"] {
+  gap: var(--marquee-gap, 48px);
+  mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+}
+.marquee-track {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  gap: var(--marquee-gap, 48px);
+}
+.marquee[data-overflow="true"] .marquee-track {
+  animation: marquee-scroll 28s linear infinite;
+}
+.git-providers .marquee[data-overflow="true"] .marquee-track {
+  animation-duration: 20s;
+}
+.marquee[data-overflow="true"]:hover .marquee-track,
+.marquee[data-overflow="true"]:focus-within .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100% - var(--marquee-gap, 48px)));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none !important;
+  }
+}
+.ensemble-link, .git-provider-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  min-width: 52px;
+  padding: 6px;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: color 150ms var(--ease-out), transform 150ms var(--ease-out);
+}
+.ensemble-link:hover, .git-provider-link:hover {
+  color: var(--accent);
+  transform: translateY(-3px) scale(1.08);
+}
+.ensemble-link:active, .git-provider-link:active {
+  transform: translateY(0) scale(1);
+}
+.ensemble-icon, .provider-icon {
+  width: 40px;
+  height: 40px;
+  display: block;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .demo-section { padding-block: 96px 86px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 40px; margin-bottom: 38px; }
 h2 { font-size: clamp(2.8rem, 4.5vw, 4.1rem); line-height: 1.08; margin-bottom: 0; }
@@ -163,7 +260,7 @@ code, kbd { font-family: var(--mono); }
   .opening-layout { column-gap: 0; }.hero { padding-block: 65px; }.hero .eyebrow { max-width: 275px; }
   h1 { font-size: clamp(4.3rem, 8vw, 6.5rem); }.hero-description { max-width: 370px; }
   .score-art { padding-left: 22px; }.score-bottom { font-size: .65rem; }.score-bottom em { font-size: .8rem; }
-  .ensemble { gap: 28px; }.ensemble ul { justify-content: start; gap: 9px 22px; }.ensemble li { font-size: .86rem; }
+  .ensemble, .git-providers { gap: 24px; }
   .why-layout, .get-started-section { gap: 45px; }.workflow-steps { gap: 23px; }.workflow-steps p { min-height: 100px; }
   .task-tab { padding-inline: 13px; }.tab-agent { margin-left: 0; }
 }
@@ -171,10 +268,13 @@ code, kbd { font-family: var(--mono); }
   .wrap { width: calc(100% - 40px); }.site-header { min-height: 85px; gap: 15px; }.wordmark { font-size: 1.75rem; }
   .brand-mark { width: 30px; height: 32px; font-size: 28px; margin-right: 8px; }
   nav { gap: 14px; }.nav-github { padding-left: 14px; gap: 7px; }
-  .opening-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "hero" "ensemble" "demo" "art"; }.hero { padding-block: 50px 35px; }.hero .eyebrow { max-width: none; }
+  .opening-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "hero" "ensemble" "providers" "demo" "art"; }.hero { padding-block: 50px 35px; }.hero .eyebrow { max-width: none; }
   h1 { font-size: clamp(3.5rem, 12vw, 5.5rem); }.hero-description { max-width: 470px; font-size: 1rem; }
   .score-art { width: min(90%, 420px); margin: 0 auto 58px; padding-left: 0; }.score-art svg { max-height: 280px; }
-  .ensemble { flex-direction: column; align-items: start; gap: 16px; }.ensemble p br { display: none; }.ensemble p strong { margin-left: 4px; }.ensemble ul { gap: 10px 25px; }
+  .ensemble, .git-providers { flex-direction: column; align-items: start; gap: 14px; }
+  .ensemble p br, .git-providers p br { display: none; }
+  .ensemble p strong, .git-providers p strong { margin-left: 4px; }
+  .marquee { width: 100%; --marquee-gap: 36px; }
   .demo-section, .workflow-section { padding-block: 60px; }.section-heading { display: block; margin-bottom: 28px; }.section-heading > p { margin-top: 22px; max-width: 400px; }
   h2 { font-size: 3rem; }.terminal-title { padding: 13px 16px; overflow-wrap: anywhere; }.demo-label { display: none; }
   .task-tab { flex-direction: column; position: relative; gap: 1px; min-width: 160px; padding: 10px 13px 10px 20px; }.task-tab .status-dot { position: absolute; top: 19px; left: 10px; }
@@ -192,7 +292,7 @@ code, kbd { font-family: var(--mono); }
 
 @media (max-width: 720px) {
   .eyebrow, .hero .eyebrow { font-size: var(--text-small); letter-spacing: .07em; }
-  nav, .hero-footnote, .ensemble p, .ensemble li, .text-link,
+  nav, .hero-footnote, .ensemble p, .git-providers p, .text-link,
   .workflow-steps > li > code, .shortcut, .shortcut kbd,
   .prefix-note, .prefix-note kbd, .install-step p, .install-step p code,
   .install-note, .install-note code, .closing > p,

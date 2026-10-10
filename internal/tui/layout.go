@@ -20,6 +20,9 @@ type bounds struct{ x, y, w, h int }
 
 func (b bounds) contains(x, y int) bool { return x >= b.x && x < b.x+b.w && y >= b.y && y < b.y+b.h }
 func (m *Model) sidebarWidth() int {
+	if m.fullscreen {
+		return 0
+	}
 	if m.sidebar && m.width >= 72 {
 		return min(32, m.width/3)
 	}

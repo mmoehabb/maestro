@@ -12,24 +12,27 @@ func TestWebsiteShellGeometry(t *testing.T) {
 	for _, size := range [][2]int{{40, 12}, {80, 24}, {120, 40}, {160, 48}} {
 		m.width, m.height = size[0], size[1]
 		for _, sidebar := range []bool{false, true} {
-			m.sidebar = sidebar
-			g := m.geometry()
-			if g.pane.x+g.pane.w > m.width || g.pane.y+g.pane.h > g.status {
-				t.Fatalf("pane overlaps chrome at %v: %+v", size, g)
-			}
-			if g.pane.w < 1 || g.pane.h < 1 {
-				t.Fatal("empty pane")
-			}
-			if m.taskAt(g.pane.x, g.pane.y) != -1 {
-				t.Fatal("pane overlaps task hit target")
-			}
-			lines := strings.Split(ansi.Strip(m.View().Content), "\n")
-			if len(lines) != m.height {
-				t.Fatalf("height %d at %v", len(lines), size)
-			}
-			for _, line := range lines {
-				if ansi.StringWidth(line) > m.width {
-					t.Fatalf("overflow %q at %v", line, size)
+			for _, fullscreen := range []bool{false, true} {
+				m.sidebar = sidebar
+				m.fullscreen = fullscreen
+				g := m.geometry()
+				if g.pane.x+g.pane.w > m.width || (!fullscreen && g.pane.y+g.pane.h > g.status) || (fullscreen && g.pane.y+g.pane.h > m.height) {
+					t.Fatalf("pane overlaps chrome at %v (sidebar=%v, fullscreen=%v): %+v", size, sidebar, fullscreen, g)
+				}
+				if g.pane.w < 1 || g.pane.h < 1 {
+					t.Fatal("empty pane")
+				}
+				if m.taskAt(g.pane.x, g.pane.y) != -1 {
+					t.Fatal("pane overlaps task hit target")
+				}
+				lines := strings.Split(ansi.Strip(m.View().Content), "\n")
+				if len(lines) != m.height {
+					t.Fatalf("height %d at %v", len(lines), size)
+				}
+				for _, line := range lines {
+					if ansi.StringWidth(line) > m.width {
+						t.Fatalf("overflow %q at %v", line, size)
+					}
 				}
 			}
 		}

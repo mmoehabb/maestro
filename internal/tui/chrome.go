@@ -21,6 +21,25 @@ type shellGeometry struct {
 
 func (m *Model) geometry() shellGeometry {
 	w, h := max(1, m.width), max(1, m.height)
+	if m.fullscreen {
+		tabsY := 0
+		top := 1
+		if h == 1 {
+			top = 0
+			tabsY = -1
+		}
+		return shellGeometry{
+			padding: 0,
+			header:  -1,
+			tabs:    tabsY,
+			tabLine: -1,
+			meta:    -1,
+			rule:    -1,
+			status:  -1,
+			footer:  -1,
+			pane:    bounds{0, top, w, max(1, h-top)},
+		}
+	}
 	pad := 1
 	if w >= 80 {
 		pad = 2

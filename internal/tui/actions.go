@@ -26,6 +26,7 @@ var actions = []action{
 	{"H", "Copy manual handoff instruction", true},
 	{"D", "View diff against base", true},
 	{"s", "Toggle tabs / sidebar", false},
+	{"f", "Toggle fullscreen", false},
 	{"T", "Choose color theme", false},
 	{"?", "Help", false},
 	{"g", "Sign in to Git host", false},
@@ -79,6 +80,9 @@ func (m *Model) dispatch(key string) tea.Cmd {
 		return m.openThemes()
 	case "s":
 		m.sidebar = !m.sidebar
+		m.resizePanes()
+	case "f":
+		m.fullscreen = !m.fullscreen
 		m.resizePanes()
 
 	case "q":

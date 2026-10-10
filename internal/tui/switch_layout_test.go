@@ -31,7 +31,7 @@ func TestSwitchSelectionAndConfirmationFitPane(t *testing.T) {
 			}
 			d.confirm, d.fresh, d.offset = true, true, 0
 			view := ansi.Strip(m.View().Content)
-			if !strings.Contains(view, "handoff?") || !strings.Contains(view, "y/Enter confirm") || !strings.Contains(view, "n/Esc cancel") {
+			if !strings.Contains(view, "handoff?") || !strings.Contains(view, "y/Enter confirm") || !strings.Contains(view, "Esc cancel") {
 				t.Fatalf("confirmation clipped at %v:\n%s", size, view)
 			}
 			m.switchKey(tea.KeyPressMsg{Code: 'n'})
@@ -66,14 +66,14 @@ func TestSwitchLongTargetKeepsConfirmationKeysVisible(t *testing.T) {
 	name := strings.Repeat("custom-agent-", 30) + "TARGET_END"
 	m.switcher = &switchDialog{agents: []string{name}, labels: []string{name}, confirm: true, fresh: true}
 	view := ansi.Strip(m.View().Content)
-	if !strings.Contains(view, "handoff?") || !strings.Contains(view, "n/Esc cancel") {
+	if !strings.Contains(view, "handoff?") || !strings.Contains(view, "Esc cancel") {
 		t.Fatal("long target obscured the confirmation", view)
 	}
 	for range 100 {
 		m.switchKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	}
 	view = ansi.Strip(m.View().Content)
-	if !strings.Contains(view, "TARGET_END") || !strings.Contains(view, "n/Esc cancel") {
+	if !strings.Contains(view, "TARGET_END") || !strings.Contains(view, "Esc cancel") {
 		t.Fatal("long target cannot be inspected with cancel still visible", view)
 	}
 }

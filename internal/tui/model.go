@@ -23,14 +23,16 @@ import (
 )
 
 type tab struct {
-	task          store.Task
-	pane          *term.Pane
-	err           error
-	pending       bool
-	status        git.Status
-	state         term.State
-	stateRevision uint64
-	statePane     *term.Pane
+	task                store.Task
+	pane                *term.Pane
+	err                 error
+	pending             bool
+	pendingHandoff      string
+	pendingHandoffFresh bool
+	status              git.Status
+	state               term.State
+	stateRevision       uint64
+	statePane           *term.Pane
 }
 type (
 	tickMsg           time.Time
@@ -128,6 +130,8 @@ func (m *Model) launch(index int, fresh bool) tea.Cmd {
 		return nil
 	}
 	t.pending = true
+	t.pendingHandoff = ""
+	t.pendingHandoffFresh = false
 	t.err = nil
 	task := t.task
 	cols, rows := m.size()
@@ -377,6 +381,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.tabs[i].task.ID == msg.TaskID && m.tabs[i].acceptActivity(msg.Pane, msg.State, msg.Revision) {
 				if msg.State == term.Done {
 					m.nextStatus = time.Time{}
+					if target := m.tabs[i].pendingHandoff; target != "" {
+						fresh := m.tabs[i].pendingHandoffFresh
+						m.tabs[i].pendingHandoff = ""
+						m.tabs[i].pendingHandoffFresh = false
+						switchCmd := m.switchTaskPending(m.tabs[i].task, target, true, fresh)
+						if reconcile == nil {
+							reconcile = switchCmd
+						} else {
+							reconcile = tea.Batch(reconcile, switchCmd)
+						}
+					}
 				}
 			}
 		}

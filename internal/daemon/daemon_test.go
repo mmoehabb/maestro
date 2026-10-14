@@ -116,6 +116,12 @@ func TestDetachReattachAndCLIMutations(t *testing.T) {
 		eventually(t, func() bool { return strings.Contains(p.Snapshot(true).Screen, "ready new") })
 	}
 	before := runtime.Panes()
+	// A pending prompt must survive detach and retain its revision while
+	// the user edits an answer through the remote pane.
+	panes[1].Paste("approve")
+	panes[1].Key(uv.Key{Code: uv.KeyEnter}, false)
+	eventually(t, func() bool { return panes[1].Snapshot(false).State == term.NeedsInput })
+	approvalRevision := panes[1].Snapshot(false).Revision
 	// Start work, then disconnect while the agent is still producing output.
 	panes[0].Paste("detached work")
 	panes[0].Key(uv.Key{Code: uv.KeyEnter}, false)
@@ -178,6 +184,16 @@ func TestDetachReattachAndCLIMutations(t *testing.T) {
 		}
 		if task.ID == tasks[0].ID {
 			eventually(t, func() bool { return strings.Contains(p.Snapshot(true).Screen, "done") })
+		}
+		if task.ID == tasks[1].ID {
+			eventually(t, func() bool { return p.Snapshot(false).State == term.NeedsInput })
+			p.Paste("work")
+			eventually(t, func() bool { return strings.Contains(p.Snapshot(true).Screen, "work") })
+			if state := p.Snapshot(false); state.State != term.NeedsInput || state.Revision != approvalRevision {
+				t.Fatal("remote editing consumed or repeated approval", state)
+			}
+			p.Key(uv.Key{Code: uv.KeyEnter}, false)
+			eventually(t, func() bool { return p.Snapshot(false).State == term.Done })
 		}
 	}
 	after := runtime.Panes()

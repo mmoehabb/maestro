@@ -16,6 +16,7 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mmoehabb/maestro/internal/app"
 	"github.com/mmoehabb/maestro/internal/config"
@@ -107,8 +108,9 @@ func TestContextAgentProcess(t *testing.T) {
 	signal.Notify(signals, os.Interrupt)
 	go func() { <-signals; emit("message", "Final context saved on stop."); _ = f.Close(); os.Exit(0) }()
 	input := bufio.NewScanner(os.Stdin)
+	redraw := 0
 	for input.Scan() {
-		switch input.Text() {
+		switch ansi.Strip(input.Text()) {
 		case "work":
 			emit("start", "Continue the task.")
 			fmt.Println("working")
@@ -116,6 +118,14 @@ func TestContextAgentProcess(t *testing.T) {
 			emit("message", "The login fix is complete.")
 			emit("done", "The login fix is complete.")
 			fmt.Println("complete")
+		case "approve", "repaint":
+			if ansi.Strip(input.Text()) == "approve" {
+				emit("start", "Approve the command.")
+			}
+			redraw++
+			fmt.Printf("\x1b[2J\x1b[HApproval redraw %d\r\nWould you like to run the following command?\r\n\r\n$ go test ./...\r\n\r\n› 1. Yes, proceed\r\n  2. No, and tell Codex what to do differently\r\n\r\nPress enter to confirm or esc to cancel", redraw)
+		case "accept":
+			fmt.Print("\x1b[2J\x1b[Hresumed command")
 		case "exit":
 			emit("message", "Final context saved on exit.")
 			_ = f.Close()
@@ -123,6 +133,68 @@ func TestContextAgentProcess(t *testing.T) {
 		}
 	}
 	os.Exit(0)
+}
+
+func TestNativeApprovalPromptInteractionAndRecovery(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	p, err := r.Start(task, 40, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready codex new")
+	sendLine(p, "approve")
+	awaitPane(t, p, term.NeedsInput, "Approval redraw 1")
+	revision := p.Snapshot(false).Revision
+	p.Key(uv.Key{Code: uv.KeyDown}, false)
+	p.Paste("repaint")
+	if got := p.Snapshot(false); got.State != term.NeedsInput || got.Revision != revision {
+		t.Fatal("editing/navigation consumed approval", got)
+	}
+	p.Key(uv.Key{Code: uv.KeyEnter}, false)
+	awaitPane(t, p, term.NeedsInput, "Approval redraw 2")
+	if got := p.Snapshot(false); got.Revision != revision {
+		t.Fatal("menu repaint duplicated the transition", got)
+	}
+	// A native transcript failure and recovery must not dismiss the screen.
+	session, err := s.Store.LatestAgentSession(context.Background(), task.ID, "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(os.Getenv("CODEX_HOME"), "sessions", "rollout-"+session.NativeID+".jsonl")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(append([]byte{}, b...), []byte("invalid\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(5 * time.Second)
+waitFailure:
+	for {
+		select {
+		case event := <-r.Events:
+			if event.Err != nil && strings.Contains(event.Err.Error(), "native transcript unavailable") {
+				break waitFailure
+			}
+		case <-deadline:
+			t.Fatal("native failure not observed")
+		}
+	}
+	awaitPane(t, p, term.NeedsInput, "Approval redraw 2")
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The watcher polls once a second even when an fsnotify event is missed.
+	time.Sleep(1200 * time.Millisecond)
+	awaitPane(t, p, term.NeedsInput, "Approval redraw 2")
+	sendLine(p, "accept")
+	awaitPane(t, p, term.Working, "resumed command")
+	time.Sleep(200 * time.Millisecond)
+	if p.Snapshot(false).State != term.Working {
+		t.Fatal("silence completed native work after approval")
+	}
+	sendLine(p, "done")
+	awaitPane(t, p, term.Done, "complete")
 }
 
 func contextRuntime(t *testing.T) (*core.TaskService, *core.Runtime, store.Task) {

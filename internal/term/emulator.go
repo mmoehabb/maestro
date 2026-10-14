@@ -16,6 +16,7 @@ type Emulator interface {
 	io.ReadWriteCloser
 	Resize(int, int)
 	Render() string
+	PlainText() string
 	Cursor() (int, int, bool)
 	Scrollback() []string
 	Title() string
@@ -36,7 +37,7 @@ type virtualTerminal struct {
 	mouseModes map[int]bool
 }
 
-func NewEmulator(cols, rows int, complete func()) Emulator {
+func NewEmulator(cols, rows int, complete func(), notify func(string)) Emulator {
 	e := &virtualTerminal{vt: vt.NewEmulator(cols, rows), visible: true, mouseModes: map[int]bool{}}
 	e.vt.SetScrollbackSize(10000)
 	e.vt.SetCallbacks(vt.Callbacks{Title: func(s string) { e.title = s }, CursorVisibility: func(v bool) { e.visible = v }, Bell: complete})
@@ -71,7 +72,24 @@ func NewEmulator(cols, rows int, complete func()) Emulator {
 		return false
 	})
 	for _, osc := range []int{9, 777} {
-		e.vt.RegisterOscHandler(osc, func([]byte) bool { complete(); return true })
+		e.vt.RegisterOscHandler(osc, func(data []byte) bool {
+			_, message, _ := strings.Cut(string(data), ";")
+			if osc == 777 {
+				var kind string
+				kind, message, _ = strings.Cut(message, ";")
+				if kind != "notify" {
+					return true
+				}
+				title, body, _ := strings.Cut(message, ";")
+				message = title + "\n" + body
+			}
+			if notify != nil {
+				notify(message)
+			} else {
+				complete()
+			}
+			return true
+		})
 	}
 	e.vt.RegisterCsiHandler(ansi.Command('?', 0, 'u'), func(ansi.Params) bool {
 		_, _ = fmt.Fprintf(e.vt.InputPipe(), "\x1b[?%du", e.flags)
@@ -116,6 +134,7 @@ func (e *virtualTerminal) Read(b []byte) (int, error)  { return e.vt.Read(b) }
 func (e *virtualTerminal) Close() error         { return e.vt.InputPipe().(io.Closer).Close() }
 func (e *virtualTerminal) Resize(c, r int)      { e.vt.Resize(c, r) }
 func (e *virtualTerminal) Render() string       { return e.vt.Render() }
+func (e *virtualTerminal) PlainText() string    { return e.vt.String() }
 func (e *virtualTerminal) Title() string        { return e.title }
 func (e *virtualTerminal) KeyboardMode() int    { return e.flags }
 func (e *virtualTerminal) MouseReporting() bool { return len(e.mouseModes) != 0 }

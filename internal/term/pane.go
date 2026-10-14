@@ -39,13 +39,16 @@ type Pane struct {
 	hasOutput bool
 }
 
-func Start(cmd *exec.Cmd, cols, rows int, idle time.Duration, hints []string) (*Pane, error) {
+func Start(cmd *exec.Cmd, cols, rows int, idle time.Duration, hints []string, prompts ...PromptDetector) (*Pane, error) {
 	pt, err := xpty.NewPty(max(1, cols), max(1, rows))
 	if err != nil {
 		return nil, err
 	}
 	p := &Pane{pty: pt, cmd: cmd, done: make(chan struct{}), dirty: make(chan struct{}, 1), activity: Activity{State: Starting, IdleAfter: idle, Hints: hints}}
-	p.emu = NewEmulator(max(1, cols), max(1, rows), p.activity.Complete)
+	if len(prompts) > 0 {
+		p.activity.Prompts = prompts[0]
+	}
+	p.emu = NewEmulator(max(1, cols), max(1, rows), p.activity.Complete, p.activity.Notification)
 	prepareProcess(cmd)
 	if err := pt.Start(cmd); err != nil {
 		_ = pt.Close()
@@ -90,6 +93,9 @@ func Start(cmd *exec.Cmd, cols, rows int, idle time.Duration, hints []string) (*
 				p.hasOutput = true
 				p.activity.Output(buf[:n], time.Now())
 				_, _ = p.emu.Write(buf[:n])
+				if p.activity.Prompts.Screen != nil {
+					p.activity.Screen(p.emu.PlainText(), time.Now())
+				}
 				p.mu.Unlock()
 				p.invalidate()
 			}
@@ -189,8 +195,30 @@ func (p *Pane) Key(k uv.Key, release bool) {
 	if p.activity.State == Exited || p.activity.State == Crashed {
 		return
 	}
+	k = NormalizeKey(k)
 	if !release {
-		p.activity.Input(time.Now())
+		key := ""
+		switch {
+		case k.Code == uv.KeyEnter && k.Mod == 0:
+			key = "enter"
+		case k.Code == uv.KeyEscape && k.Mod == 0:
+			key = "esc"
+		case (k.Code == 'c' || k.Code == 's') && k.Mod == uv.ModCtrl:
+			key = "ctrl+" + string(k.Code)
+		case k.Mod == 0:
+			key = k.Text
+		}
+		submitted := key == "enter" || key == "esc" || key == "ctrl+c" || key == "ctrl+s" ||
+			(k.Text != "" && !p.activity.dialog)
+		if p.activity.State == NeedsInput && p.activity.dialog && !p.activity.seenPrompt &&
+			p.activity.Prompts.Submission != nil {
+			submitted = p.activity.Prompts.Submission(p.activity.announcement, key)
+		}
+		if submitted {
+			p.activity.Input(time.Now())
+		} else {
+			p.activity.Interact(time.Now())
+		}
 	}
 	p.emu.Key(k, release)
 }
@@ -205,7 +233,7 @@ func (p *Pane) Paste(s string) {
 	if p.activity.State == Exited || p.activity.State == Crashed {
 		return
 	}
-	p.activity.Input(time.Now())
+	p.activity.Interact(time.Now())
 	p.emu.Paste(s)
 }
 
@@ -218,6 +246,9 @@ func (p *Pane) Mouse(m uv.Mouse, release, motion bool) {
 	defer p.mu.Unlock()
 	if p.activity.State == Exited || p.activity.State == Crashed {
 		return
+	}
+	if !release && !motion && p.activity.State == NeedsInput {
+		p.activity.Interact(time.Now())
 	}
 	p.emu.Mouse(m, release, motion)
 }

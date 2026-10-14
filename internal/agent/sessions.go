@@ -252,6 +252,11 @@ func (g Generic) Hints() []string {
 	if g.Config.InputHints != nil {
 		return g.Config.InputHints
 	}
+	if g.Name == "codex" {
+		// Codex redraws approval dialogs; inspect their current screen instead
+		// of matching conversation text or stale terminal output.
+		return nil
+	}
 	return []string{"allow command?", "approve?", "do you want to proceed?", "allow this command", "permission required"}
 }
 

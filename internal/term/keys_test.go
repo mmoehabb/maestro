@@ -12,7 +12,7 @@ import (
 
 func TestPrintableKeysReachAgent(t *testing.T) {
 	for _, flags := range []int{0, 1, 3} {
-		e := NewEmulator(80, 24, func() {})
+		e := NewEmulator(80, 24, func() {}, nil)
 		if flags != 0 {
 			_, _ = io.WriteString(e, "\x1b[>"+strconv.Itoa(flags)+"u")
 		}
@@ -44,7 +44,7 @@ func TestPrintableKeysReachAgent(t *testing.T) {
 }
 
 func TestLegacyAltShiftedText(t *testing.T) {
-	e := NewEmulator(80, 24, func() {})
+	e := NewEmulator(80, 24, func() {}, nil)
 	var captured strings.Builder
 	done := make(chan struct{})
 	go func() { _, _ = io.Copy(&captured, e); close(done) }()

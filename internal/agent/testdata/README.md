@@ -1,5 +1,12 @@
 # Native parser fixtures (version 1)
 
+`codex-prompts-v0.162.1.json` contains synthetic visible terminal screens based
+on Codex 0.162.1's approval overlay and question renderer. It covers command,
+edit, permission, network, terminal-input and MCP approvals, questionnaires,
+and conversation examples that must not trigger attention. The prompt tests
+feed these screens through the emulator at several widths with bytewise ANSI
+output, without invoking a model or using private conversation content.
+
 These are synthetic records, containing no copied private conversation content.
 Record shapes were inspected locally on 2026-10-05: Codex rollout JSONL, agy
 `.system_generated/logs/transcript.jsonl`, and OpenCode message/part records.

@@ -265,7 +265,11 @@ func (r *Runtime) start(operation context.Context, task store.Task, cols, rows i
 	}
 	idle, _ := time.ParseDuration(r.Service.Config.Activity.IdleAfter)
 	started := time.Now()
-	pane, err := term.Start(cmd, cols, rows, idle, a.Hints())
+	var prompts term.PromptDetector
+	if a.ID() == "codex" && r.Service.Config.Agents[task.Agent].InputHints == nil {
+		prompts = term.PromptDetector{Screen: a.InputPrompt, Notification: a.InputNotification, Submission: a.InputSubmission}
+	}
+	pane, err := term.Start(cmd, cols, rows, idle, a.Hints(), prompts)
 	if err != nil {
 		return nil, err
 	}

@@ -80,6 +80,18 @@ also mark a turn complete, while `input_hints` recognize approval/question text.
 These signals are heuristics: a quiet tool can still be running. Codex, agy, and
 OpenCode have native adapters with stronger turn signals and structured history.
 
+Codex also recognizes approval and question dialogs from the current visible
+screen, including wrapped headings, plus approval/question terminal notifications.
+Its NeedsInput status persists while you navigate, type or paste into a dialog.
+When only an approval notification is visible, default printable approval
+shortcuts are treated as decisions; question text remains editing. Codex's
+custom keybindings still rely on screen disappearance or native completion.
+The status returns to Working after the dialog closes, or Done when the native
+turn completes or is interrupted. This screen recognition is still a heuristic
+and depends on the installed agent's UI wording. Setting `input_hints` replaces
+Codex's built-in prompt recognition; `input_hints = []` disables it. Generic
+output hints cannot distinguish every menu interaction from an answer.
+
 Use `[activity] idle_after = "2s"` to configure the quiet period. Desktop alerts
 for background tasks are controlled by `notify_on = ["done", "needs_input"]`;
 set `notify_on = []` to disable desktop delivery.

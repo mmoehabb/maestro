@@ -35,6 +35,9 @@ type Adapter interface {
 	CreateSession(context.Context, string) (string, error)
 	DiscoverSession(context.Context, string, time.Time) (string, error)
 	Hints() []string
+	InputPrompt(string) bool
+	InputNotification(string) bool
+	InputSubmission(string, string) bool
 	Read(context.Context, string, string) (Transcript, error)
 }
 type Registry struct{ Agents map[string]config.Agent }

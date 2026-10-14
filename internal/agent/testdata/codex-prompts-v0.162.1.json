@@ -1,0 +1,77 @@
+[
+  {
+    "name": "command",
+    "screen": "Would you like to run the following command?\n\n$ go test ./...\n\n› 1. Yes, proceed\n  2. No, and tell Codex what to do differently\n\nPress enter to confirm or esc to cancel",
+    "waiting": true
+  },
+  {
+    "name": "edits",
+    "screen": "Would you like to make the following edits?\n\nmain.go\n› 1. Yes, proceed\n  2. No, and tell Codex what to do differently\n\nPress enter to confirm or esc to cancel",
+    "waiting": true
+  },
+  {
+    "name": "permissions",
+    "screen": "Would you like to grant these permissions?\n\nRead /tmp/fixture\n› 1. Yes, allow once\n  2. No, and tell Codex what to do differently\n\nPress enter to confirm or esc to cancel",
+    "waiting": true
+  },
+  {
+    "name": "network",
+    "screen": "Do you want to approve network access to \"example.com\"?\n› 1. Yes, allow once\n  2. No, and tell Codex what to do differently\n\nPress enter to confirm or esc to cancel",
+    "waiting": true
+  },
+  {
+    "name": "terminal input",
+    "screen": "Would you like to send input to terminal 123?\n› 1. Yes, proceed\n  2. No, and tell Codex what to do differently\n\nPress enter to confirm or esc to cancel",
+    "waiting": true
+  },
+  {
+    "name": "MCP",
+    "screen": "fixture-server needs your approval.\n› 1. Approve\n  2. Decline\n\nPress enter to confirm or esc to cancel",
+    "waiting": true
+  },
+  {
+    "name": "question",
+    "screen": "Question 1/2 (2 unanswered)\nWhich implementation should I use?\n› 1. First option\n  2. Second option\nenter to select · tab to next question · ctrl+s to submit all",
+    "waiting": true
+  },
+  {
+    "name": "free text question",
+    "screen": "Question 1/1\nWhat should the feature be called?\n› New name\nctrl+s to submit all",
+    "waiting": true
+  },
+  {
+    "name": "unanswered confirmation",
+    "screen": "Submit with 1 unanswered\n1 unanswered question\n› 1. Submit\n  2. Go back\nenter to select · esc to cancel",
+    "waiting": true
+  },
+  {
+    "name": "heading without controls",
+    "screen": "Would you like to run the following command?\nThis is an explanation of how approval works.",
+    "waiting": false
+  },
+  {
+    "name": "quoted example",
+    "screen": "The dialog contains:\n> Would you like to run the following command?\n> Press enter to confirm or esc to cancel",
+    "waiting": false
+  },
+  {
+    "name": "inline example",
+    "screen": "Example: Would you like to grant these permissions?\nPress enter to confirm or esc to cancel",
+    "waiting": false
+  },
+  {
+    "name": "finished",
+    "screen": "The requested command completed.\n› Ask a follow-up question\n? for shortcuts",
+    "waiting": false
+  },
+  {
+    "name": "quoted MCP example",
+    "screen": "> fixture-server needs your approval.\n> Press enter to confirm or esc to cancel",
+    "waiting": false
+  },
+  {
+    "name": "fenced example",
+    "screen": "```text\nWould you like to run the following command?\nPress enter to confirm or esc to cancel\n```",
+    "waiting": false
+  }
+]

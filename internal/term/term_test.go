@@ -42,6 +42,8 @@ func TestActivity(t *testing.T) {
 		t.Fatal("approval dismissed by idle")
 	}
 	a.Input(now)
+	a.Output([]byte("approval accepted"), now)
+	a.Tick(now.Add(promptSettleDelay))
 	a.Complete()
 	if a.State != Done {
 		t.Fatal(a.State)
@@ -49,7 +51,7 @@ func TestActivity(t *testing.T) {
 }
 
 func TestEmulatorInputModes(t *testing.T) {
-	e := NewEmulator(80, 24, func() {})
+	e := NewEmulator(80, 24, func() {}, nil)
 	var output bytes.Buffer
 	var mu sync.Mutex
 	done := make(chan struct{})
@@ -99,7 +101,7 @@ func TestEmulatorInputModes(t *testing.T) {
 }
 
 func TestEmulatorTracksMouseReporting(t *testing.T) {
-	e := NewEmulator(80, 24, func() {})
+	e := NewEmulator(80, 24, func() {}, nil)
 	defer e.Close()
 	for _, tc := range []struct {
 		output string
@@ -273,6 +275,8 @@ func TestDelayedNativeStartPreservesApproval(t *testing.T) {
 		t.Fatalf("delayed start lost approval: %+v", a)
 	}
 	a.Input(now)
+	a.Output([]byte("approval accepted"), now)
+	a.Tick(now.Add(promptSettleDelay))
 	if a.State != Working || a.tail != "" {
 		t.Fatalf("approval response did not resume work: %+v", a)
 	}
@@ -284,7 +288,7 @@ func TestDelayedNativeStartPreservesApproval(t *testing.T) {
 
 func TestAlternateScreenHistorySurvivesTeardown(t *testing.T) {
 	for _, exit := range []string{"\x1b[?1049l", "\x1b[?25;1049l", "\x1b[2J\x1b[?1049l"} {
-		e := NewEmulator(80, 24, func() {})
+		e := NewEmulator(80, 24, func() {}, nil)
 		// Write bytewise to exercise sequences split across PTY reads.
 		for _, b := range []byte("\x1b[?1049himportant conversation" + exit) {
 			_, _ = e.Write([]byte{b})
@@ -300,7 +304,7 @@ func TestAlternateScreenHistorySurvivesTeardown(t *testing.T) {
 }
 
 func TestScrollbackRetainsOriginalLineWidth(t *testing.T) {
-	e := NewEmulator(80, 2, func() {})
+	e := NewEmulator(80, 2, func() {}, nil)
 	defer e.Close()
 	line := strings.Repeat("a", 40) + "IMPORTANT_END"
 	_, _ = io.WriteString(e, line+"\r\nnext\r\nlast\r\n")

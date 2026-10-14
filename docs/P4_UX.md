@@ -60,6 +60,12 @@ notifications and uses temporary repositories and data directories.
    one toast/attention highlight and one enabled desktop alert per transition.
    Repeat with the terminal unfocused and with `notify_on = []`. Disable the
    OS notification helper and confirm the TUI remains usable with local alerts.
+   With Codex, exercise command, edit, additional-permission and network approvals
+   and a questionnaire at narrow and wide terminal sizes. Expect NeedsInput with
+   agent notifications enabled or disabled. Navigate, type, paste and resize while
+   the prompt is open; the status and transition alert must not repeat. Approve,
+   reject or cancel and check Working resumes or native completion shows Done.
+   Detach with a pending prompt and reattach; the same status must be restored.
 6. Inspect every dialog at both golden sizes, including long names, errors,
    empty lists, and task-list overflow. Check Enter, Ctrl+C, prefix fallback,
    and mouse input still reach the agent outside Maestro views.

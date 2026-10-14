@@ -20,7 +20,7 @@ func TestThemesPreserveExplicitAgentColors(t *testing.T) {
 		for _, sidebar := range []bool{false, true} {
 			m.cfg.Theme, m.sidebar = name, sidebar
 			width, rows := m.size()
-			agent := term.NewEmulator(width, rows, func() {})
+			agent := term.NewEmulator(width, rows, func() {}, nil)
 			_, err := agent.Write([]byte("\x1b[38;2;17;34;51;48;2;68;85;102mAGENT\x1b[0m"))
 			if err != nil {
 				t.Fatal(err)

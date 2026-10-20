@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,11 +10,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mmoehabb/maestro/internal/core"
 	"github.com/mmoehabb/maestro/internal/forge"
 	"github.com/mmoehabb/maestro/internal/store"
+	"github.com/mmoehabb/maestro/internal/term"
 )
 
 func TestForgeSnapshots(t *testing.T) {
@@ -166,5 +169,80 @@ func TestWorkflowOnlyUpdatesItsOwningDialog(t *testing.T) {
 	m.workflowResult(workflowMsg{task: task, action: "pr", dialog: dialog})
 	if m.forgeUI == nil || m.forgeUI.body.Value() != "Replacement draft" {
 		t.Fatal("stale result dismissed the replacement editor")
+	}
+}
+
+// Daemon error responses contain no task data.
+type failingWorkflowRuntime struct{ Runtime }
+
+func (failingWorkflowRuntime) Workflow(context.Context, store.Task, string, core.WorkflowOptions) (store.Task, error) {
+	return store.Task{}, errors.New("workflow failed")
+}
+
+type workflowInputPane struct {
+	term.RemotePane
+	keys   []uv.Key
+	pastes []string
+}
+
+func (p *workflowInputPane) Key(key uv.Key, _ bool) { p.keys = append(p.keys, key) }
+func (p *workflowInputPane) Paste(text string)      { p.pastes = append(p.pastes, text) }
+
+func TestFailedPRRestoresAgentInputAfterEscape(t *testing.T) {
+	m := testModel(t)
+	m.runtime = failingWorkflowRuntime{}
+	pane := &workflowInputPane{}
+	m.tabs[0].pane = term.NewRemotePane(pane)
+	task := m.tabs[0].task
+	dialog := newPRDialog(task, forge.NewPR{Title: "Title", Base: "main", Body: "Unsaved description"}, 80, 24)
+	m.forgeUI = dialog
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+	if cmd == nil || !m.tabs[0].pending || !dialog.busy {
+		t.Fatal("PR submission did not start")
+	}
+	m.Update(cmd())
+	if m.forgeUI != dialog || dialog.busy || dialog.err != "workflow failed" || dialog.body.Value() != "Unsaved description" {
+		t.Fatal("PR failure did not preserve the editable draft and error")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.forgeUI != nil {
+		t.Fatal("Escape did not close the failed PR dialog")
+	}
+	m.Update(tea.KeyPressMsg{Code: 'x'})
+	m.Update(tea.PasteMsg{Content: "continue working"})
+	if len(pane.keys) != 1 || pane.keys[0].Code != 'x' || len(pane.pastes) != 1 || pane.pastes[0] != "continue working" {
+		t.Fatalf("agent input blocked after failed PR: keys=%v, pastes=%v, pending=%v", pane.keys, pane.pastes, m.tabs[0].pending)
+	}
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	_, cmd = m.Update(tea.KeyPressMsg{Code: 'P'})
+	if cmd == nil || m.forgeUI == nil {
+		t.Fatal("could not reopen the PR dialog to retry")
+	}
+}
+
+func TestFailedWorkflowReleasesOriginalTask(t *testing.T) {
+	for _, action := range []string{"push", "pr", "refresh", "merge", "cleanup", "archive", "reopen"} {
+		t.Run(action, func(t *testing.T) {
+			m := testModel(t)
+			m.runtime = failingWorkflowRuntime{}
+			task := m.tabs[0].task
+			cmd := m.workflow(task, action, core.WorkflowOptions{})
+			if cmd == nil || !m.tabs[0].pending {
+				t.Fatal("workflow did not mark the task pending")
+			}
+			// Completion must release the originating tab even after selection changes.
+			m.selectTab(1)
+			m.tabs[1].pending = true
+			m.Update(cmd())
+			if m.tabs[0].pending || !m.tabs[1].pending {
+				t.Fatal("failure did not release only the originating task")
+			}
+			if m.tabs[0].task != task {
+				t.Fatal("failure replaced the task with an empty result")
+			}
+			if action == "cleanup" && (m.forgeUI == nil || m.forgeUI.task != task || m.forgeUI.err != "workflow failed") {
+				t.Fatal("cleanup failure did not retain the task for retry")
+			}
+		})
 	}
 }

@@ -79,6 +79,11 @@ func (m *Model) workflow(task store.Task, action string, opts core.WorkflowOptio
 	return func() tea.Msg {
 		ctx := git.WithCredentialPrompt(context.Background(), m.promptCredentials)
 		result, err := m.runtime.Workflow(ctx, task, action, opts)
+		if err != nil && result.ID == 0 {
+			// Daemon failures omit task data; retain the identity so the tab
+			// can leave its pending state and cleanup can be retried.
+			result = task
+		}
 		return workflowMsg{task: result, action: action, err: err, dialog: dialog}
 	}
 }

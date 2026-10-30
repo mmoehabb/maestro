@@ -4,16 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/google/uuid"
 
 	"github.com/mmoehabb/maestro/internal/agent"
 	"github.com/mmoehabb/maestro/internal/forge"
 	"github.com/mmoehabb/maestro/internal/git"
 	"github.com/mmoehabb/maestro/internal/handoff"
+	"github.com/mmoehabb/maestro/internal/portable"
 	"github.com/mmoehabb/maestro/internal/store"
 	"github.com/mmoehabb/maestro/internal/term"
 )
@@ -22,6 +26,7 @@ type Event struct {
 	Tasks     []store.Task
 	Task      *store.Task
 	Cleanup   bool
+	Progress  string
 	TaskID    int64
 	SessionID int64
 	Pane      *term.Pane
@@ -225,10 +230,16 @@ func (r *Runtime) start(operation context.Context, task store.Task, cols, rows i
 		if handoffFrom != nil {
 			from = *handoffFrom
 		}
-		if pending.ID != 0 && pending.Agent == task.Agent {
+		if pending.ID != 0 {
 			from = pending.FromSession
 		}
-		content, e := r.prepareHandoff(ctx, task, from)
+		content := pending.Content
+		var e error
+		if pending.ID == 0 {
+			content, e = r.prepareHandoff(ctx, task, from)
+		} else if pending.Agent != task.Agent {
+			e = r.Service.Store.PrepareHandoff(ctx, task.ID, from, task.Agent, content)
+		}
 		if e != nil {
 			return nil, e
 		}
@@ -291,17 +302,17 @@ var ErrFreshStartRequired = errors.New("no native session ID found; confirm a fr
 
 var ErrInterruptRequired = errors.New("agent is active; confirm interruption to switch")
 
-func (r *Runtime) Switch(ctx context.Context, task store.Task, target string, cols, rows int, confirmed bool) (*term.Pane, error) {
-	return r.switchAgent(ctx, task, target, cols, rows, confirmed, false)
+func (r *Runtime) Switch(ctx context.Context, task store.Task, target string, cols, rows int, _ bool) (*term.Pane, error) {
+	return r.switchAgent(ctx, task, target, cols, rows, false)
 }
 
 // SwitchFresh explicitly starts the selected target with the saved handoff.
-// Interruption of an active outgoing agent still requires confirmation.
-func (r *Runtime) SwitchFresh(ctx context.Context, task store.Task, target string, cols, rows int, confirmed bool) (*term.Pane, error) {
-	return r.switchAgent(ctx, task, target, cols, rows, confirmed, true)
+// The outgoing agent finishes its current turn before generating the handoff.
+func (r *Runtime) SwitchFresh(ctx context.Context, task store.Task, target string, cols, rows int, _ bool) (*term.Pane, error) {
+	return r.switchAgent(ctx, task, target, cols, rows, true)
 }
 
-func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target string, cols, rows int, confirmed, fresh bool) (*term.Pane, error) {
+func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target string, cols, rows int, fresh bool) (*term.Pane, error) {
 	done, err := r.operation(task.ID)
 	if err != nil {
 		return nil, err
@@ -352,11 +363,48 @@ func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target strin
 	if _, err = a.Command(op, agent.LaunchSpec{Dir: task.Worktree, SessionID: targetID, NewSession: targetID == "", Prompt: prompt}); err != nil {
 		return nil, err
 	}
-	if old := r.entry(task.ID); old != nil {
-		state := old.pane.Snapshot(false).State
-		if !confirmed && (state == term.Working || state == term.Starting || state == term.NeedsInput) {
-			return nil, ErrInterruptRequired
+	if pending.ID != 0 && r.entry(task.ID) != nil && pending.FromSession != r.entry(task.ID).session.ID {
+		pending = store.Handoff{}
+	}
+	if pending.ID == 0 {
+		old := r.entry(task.ID)
+		if old == nil {
+			previous, e := r.Service.Store.LatestAgentSession(op, task.ID, task.Agent)
+			if e != nil {
+				return nil, e
+			}
+			if previous.ID == 0 {
+				candidate := task
+				candidate.Agent = target
+				content, e := r.prepareHandoff(op, candidate, 0)
+				if e != nil {
+					return nil, e
+				}
+				if e = handoff.Write(task.Worktree, content); e != nil {
+					return nil, e
+				}
+				return r.start(op, candidate, cols, rows, fresh, nil)
+			}
+			if previous.NativeID == "" {
+				return nil, fmt.Errorf("cannot generate handoff: outgoing conversation cannot be resumed")
+			}
+			if _, e = r.start(op, task, cols, rows, false, nil); e != nil {
+				return nil, e
+			}
+			old = r.entry(task.ID)
 		}
+		content, e := r.agentHandoff(op, old)
+		if e != nil {
+			return nil, e
+		}
+		if e = handoff.Write(task.Worktree, content); e != nil {
+			return nil, e
+		}
+		if e = r.Service.Store.PrepareHandoff(op, task.ID, old.session.ID, target, content); e != nil {
+			return nil, e
+		}
+	}
+	if old := r.entry(task.ID); old != nil {
 		old.pane.Stop()
 		<-old.finished
 		if old.saveErr != nil {
@@ -745,4 +793,72 @@ func (r *Runtime) retryHistory(entry *running) error {
 		return err
 	}
 	return r.Service.Store.EndSession(ctx, entry.session.ID, entry.pane.Snapshot(false).ExitCode)
+}
+
+// agentHandoff keeps the outgoing conversation alive until it publishes a fresh brief.
+func (r *Runtime) agentHandoff(ctx context.Context, old *running) (string, error) {
+	r.emit(Event{TaskID: old.task.ID, Pane: old.pane, Progress: "Waiting for current turn · ctrl+g cancels switch"})
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	wait := func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-old.finished:
+			return fmt.Errorf("outgoing agent exited before completing handoff")
+		case <-ticker.C:
+			return nil
+		}
+	}
+	for old.pane.Snapshot(false).State != term.Done {
+		if err := wait(); err != nil {
+			return "", err
+		}
+	}
+	rel := filepath.Join(".maestro", "local", "handoff-"+uuid.NewString()+".md")
+	path := filepath.Join(old.task.Worktree, rel)
+	marker := rel + ".request"
+	if err := portable.WriteFile(old.task.Worktree, marker, []byte("handoff request")); err != nil {
+		return "", err
+	}
+	defer os.Remove(filepath.Join(old.task.Worktree, marker))
+	defer os.Remove(path)
+	r.emit(Event{TaskID: old.task.ID, Progress: "Writing handoff · ctrl+g cancels switch"})
+	old.pane.Paste(fmt.Sprintf("Wrap up this conversation for the next agent. Write your goal, decisions, completed work, outstanding work, tests, blockers and next steps to %s. Write the complete file atomically, then finish this turn and remain available.", path))
+	old.pane.Key(uv.Key{Code: 13}, false)
+	for {
+		if err := wait(); err != nil {
+			return "", err
+		}
+		for _, parent := range []string{".maestro", filepath.Join(".maestro", "local")} {
+			info, err := os.Lstat(filepath.Join(old.task.Worktree, parent))
+			if err != nil {
+				return "", err
+			}
+			if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+				return "", fmt.Errorf("handoff directory must be a regular directory")
+			}
+		}
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("handoff must be a regular file")
+		}
+		if old.pane.Snapshot(false).State != term.Done {
+			continue
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(string(content)) == "" {
+			return "", fmt.Errorf("agent wrote an empty handoff")
+		}
+		return string(content), nil
+	}
 }

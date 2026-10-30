@@ -63,6 +63,7 @@ func checkpointCommit(t *testing.T, s *core.TaskService, task store.Task) {
 
 func TestPortableTaskRoundTrip(t *testing.T) {
 	t.Setenv("MAESTRO_TEST_HELPER", "1")
+	configureFakeAgentRace(t)
 	ctx := context.Background()
 	for _, checkoutTask := range []bool{false, true} {
 		name := "remote-branch"
@@ -299,6 +300,7 @@ func TestPortableCheckpointRefreshAndRetry(t *testing.T) {
 
 func TestPortableMultipleTasksAndManualPrompt(t *testing.T) {
 	t.Setenv("MAESTRO_TEST_HELPER", "1")
+	configureFakeAgentRace(t)
 	ctx := context.Background()
 	root := testutil.Repo(t)
 	s := portableOpen(t, root, portablePaths(t))
@@ -453,6 +455,7 @@ func TestPortableConflictsArchiveAndDeletion(t *testing.T) {
 
 func TestExplicitRestoreKeepsDivergentCheckoutUsable(t *testing.T) {
 	t.Setenv("MAESTRO_TEST_HELPER", "1")
+	configureFakeAgentRace(t)
 	ctx := context.Background()
 	root := testutil.Repo(t)
 	source := portableOpen(t, root, portablePaths(t))

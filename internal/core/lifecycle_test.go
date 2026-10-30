@@ -15,6 +15,7 @@ import (
 
 func TestArchiveRunningTask(t *testing.T) {
 	t.Setenv("MAESTRO_TEST_HELPER", "1")
+	configureFakeAgentRace(t)
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

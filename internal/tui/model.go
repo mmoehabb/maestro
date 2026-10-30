@@ -27,6 +27,8 @@ type tab struct {
 	pane                *term.Pane
 	err                 error
 	pending             bool
+	switchCancel        context.CancelFunc
+	switchProgress      string
 	pendingHandoff      string
 	pendingHandoffFresh bool
 	status              git.Status
@@ -363,6 +365,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notify("Shell: " + msg.err.Error())
 		}
 	case core.Event:
+		if msg.Progress != "" {
+			for i := range m.tabs {
+				if m.tabs[i].task.ID == msg.TaskID {
+					m.tabs[i].switchProgress = msg.Progress
+					if msg.Pane != nil {
+						m.tabs[i].attachPane(msg.Pane)
+					}
+				}
+			}
+			m.notify(msg.Progress)
+		}
 		var reconcile tea.Cmd
 		if msg.Tasks != nil && m.loaded {
 			reconcile = m.reconcileTasks(msg.Tasks)
@@ -508,7 +521,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_, rows := m.size()
 				m.scroll = max(0, m.scroll-rows)
 			case "y":
-				if len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+				if len(m.tabs) > 0 && (!m.tabs[m.active].pending || m.tabs[m.active].switchCancel != nil) && m.tabs[m.active].pane != nil {
 					pane := m.tabs[m.active].pane
 					m.scroll = 0
 					return m, func() tea.Msg {
@@ -527,11 +540,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := msg.String()
 		if m.prefixed {
 			m.prefixed = false
+			if key == "ctrl+g" && len(m.tabs) > 0 && m.tabs[m.active].switchCancel != nil {
+				m.tabs[m.active].switchCancel()
+				return m, nil
+			}
 			if key == m.prefix {
 				m.forwardKey(msg, false)
 				return m, nil
 			}
 			return m, m.dispatch(key)
+		}
+		if key == "ctrl+g" && len(m.tabs) > 0 && m.tabs[m.active].switchCancel != nil {
+			m.tabs[m.active].switchCancel()
+			return m, nil
 		}
 		if key == m.prefix {
 			m.prefixed = true
@@ -558,7 +579,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.swallowed, msg.Code)
 			return m, nil
 		}
-		if m.credentialUI == nil && !m.prefixed && m.themes == nil && m.palette == nil && m.diff == nil && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+		if m.credentialUI == nil && !m.prefixed && m.themes == nil && m.palette == nil && m.diff == nil && m.forgeUI == nil && m.notes == nil && m.dialog == nil && m.switcher == nil && m.history == nil && !m.help && m.scroll == 0 && len(m.tabs) > 0 && (!m.tabs[m.active].pending || m.tabs[m.active].switchCancel != nil) && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Key(uv.Key(msg), true)
 		}
 	case tea.PasteMsg:
@@ -593,7 +614,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.dialog != nil {
 			return m, m.dialogInput(msg)
 		}
-		if !m.help && m.scroll == 0 && len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+		if !m.help && m.scroll == 0 && len(m.tabs) > 0 && (!m.tabs[m.active].pending || m.tabs[m.active].switchCancel != nil) && m.tabs[m.active].pane != nil {
 			m.tabs[m.active].pane.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
@@ -629,7 +650,7 @@ func (m *Model) selectTab(i int) {
 
 func (m *Model) forwardKey(msg tea.KeyPressMsg, release bool) {
 	delete(m.swallowed, msg.Code)
-	if len(m.tabs) > 0 && !m.tabs[m.active].pending && m.tabs[m.active].pane != nil {
+	if len(m.tabs) > 0 && (!m.tabs[m.active].pending || m.tabs[m.active].switchCancel != nil) && m.tabs[m.active].pane != nil {
 		m.tabs[m.active].pane.Key(uv.Key(msg), release)
 	}
 }

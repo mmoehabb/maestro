@@ -394,7 +394,11 @@ budget. The deterministic estimator conservatively counts each UTF-8 byte as a
 token; actual model token usage is usually lower. Older dialogue and tool output
 are trimmed, with omission markers. Terminal snapshots retain their newest lines
 and remain in the handoff when native history could not be fully imported.
-No model calls are made to summarize history.
+When switching an existing conversation, Maestro waits for the current turn and asks
+the outgoing agent to write a fresh handoff before stopping it. Approval prompts
+remain interactive; press Ctrl+G to cancel the switch. Tasks with no outgoing
+conversation use their saved task context. Failed launches retain the handoff for
+retry, including when selecting another target agent.
 
 Use `prefix n` to edit multiline task notes. Ctrl+S saves them and Escape cancels;
 notes are kept in SQLite and included in subsequent handoffs. Outside the TUI,

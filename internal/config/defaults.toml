@@ -71,3 +71,33 @@ token = ""
 [codeberg]
 host = ""
 token = ""
+
+[agents.crush]
+cmd = "crush"
+manual_prompt = true
+new = []
+resume = ["--session", "{{.SessionID}}"]
+
+[agents.kilo]
+cmd = "kilo"
+manual_prompt = true
+new = []
+resume = ["--session", "{{.SessionID}}"]
+
+[agents.gemini]
+cmd = "gemini"
+new = ["{{if .Prompt}}--prompt-interactive{{end}}", "{{.Prompt}}"]
+resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--prompt-interactive{{end}}", "{{.Prompt}}"]
+
+[agents.copilot]
+cmd = "copilot"
+generate_session_id = true
+new = ["--session-id", "{{.SessionID}}", "{{if .Prompt}}--interactive={{.Prompt}}{{end}}"]
+resume = ["--session-id", "{{.SessionID}}", "{{if .Prompt}}--interactive={{.Prompt}}{{end}}"]
+
+[agents.aider]
+cmd = "aider"
+generate_session_id = true
+manual_prompt = true
+new = ["--chat-history-file", ".maestro/local/aider-{{.SessionID}}.history.md", "--no-restore-chat-history"]
+resume = ["--chat-history-file", ".maestro/local/aider-{{.SessionID}}.history.md", "--restore-chat-history"]

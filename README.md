@@ -1,6 +1,6 @@
 # Maestro
 
-**tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code and Cursor Agent side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
+**tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code, Cursor Agent, Crush, Kilo, Gemini CLI, GitHub Copilot CLI and Aider side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
 
 ## Install (from source)
 
@@ -273,6 +273,11 @@ Built-in presets are available in the new-task picker and through `maestro new -
 | `qoder` | `qoder` | Maestro supplies a UUID using `--session-id` |
 | `kimi` | `kimi` | Discovered from Kimi Code's `~/.kimi-code/sessions` metadata |
 | `cursor-agent` | `cursor-agent` | Allocated by `cursor-agent create-chat` before launch |
+| `crush` | `crush` | Discovered from project session listing; manual prompts |
+| `kilo` | `kilo` | Discovered from project session listing; manual prompts |
+| `gemini` | `gemini` | Discovered from saved project session metadata |
+| `copilot` | `copilot` | Maestro supplies a UUID using `--session-id` |
+| `aider` | `aider` | Per-session chat history file; manual prompts |
 
 Install and authenticate the chosen CLI separately; `maestro doctor` checks executable availability. Override the preset's `cmd` if your installation uses another executable name, such as `agent` for Cursor or `qodercli` for older Qoder installations. The argument flags must also be supported by that version.
 
@@ -473,3 +478,10 @@ Linux terminal smoke tests and Windows/macOS cross-builds have been performed. R
 ## License
 
 [MIT](LICENSE)
+
+Crush (including Hyper configurations), Kilo and Aider use manual prompt entry:
+start without `-p`, then type in the pane. Use `prefix H` to copy handoffs.
+Gemini uses `--prompt-interactive`; Copilot uses `--interactive` and requires
+ a version supporting `--session-id`. Install and authenticate each CLI separately.
+Aider restores history from `.maestro/local/aider-<session-id>.history.md`.
+These agents use terminal history and heuristic activity detection.

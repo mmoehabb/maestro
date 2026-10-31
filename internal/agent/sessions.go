@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,6 +69,88 @@ func (g Generic) DiscoverSession(ctx context.Context, dir string, since time.Tim
 		return "", err
 	}
 	switch g.Name {
+	case "crush", "kilo":
+		args := []string{"session", "list", "--format", "json"}
+		if g.Name == "crush" {
+			args = []string{"session", "list", "--json"}
+		}
+		cmd := exec.CommandContext(ctx, g.Config.Cmd, args...)
+		cmd.Dir = dir
+		cmd.WaitDelay = time.Second
+		var out limitedBuffer
+		cmd.Stdout = &out
+		if err := cmd.Run(); err != nil {
+			return "", err
+		}
+		var entries []struct {
+			ID, UUID, Directory string
+			Created             json.RawMessage
+		}
+		if err := json.Unmarshal(out.Bytes(), &entries); err != nil {
+			return "", err
+		}
+		var id string
+		var latest time.Time
+		for _, e := range entries {
+			if e.Directory != "" && !sameDirectory(e.Directory, dir) {
+				continue
+			}
+			var created time.Time
+			var text string
+			if json.Unmarshal(e.Created, &text) == nil {
+				created, _ = time.Parse(time.RFC3339Nano, text)
+			} else {
+				var millis int64
+				if json.Unmarshal(e.Created, &millis) == nil {
+					created = time.UnixMilli(millis)
+				}
+			}
+			if !created.Before(since.Add(-time.Second)) && created.After(latest) {
+				id, latest = e.ID, created
+				if e.UUID != "" {
+					id = e.UUID
+				}
+			}
+		}
+		return id, nil
+	case "gemini":
+		if override := os.Getenv("GEMINI_CLI_HOME"); override != "" {
+			home = override
+		}
+		expected := fmt.Sprintf("%x", sha256.Sum256([]byte(dir)))
+		var id string
+		var latest time.Time
+		err := filepath.WalkDir(filepath.Join(home, ".gemini", "tmp"), func(path string, entry fs.DirEntry, err error) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if os.IsNotExist(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() || filepath.Base(filepath.Dir(path)) != "chats" || !strings.HasPrefix(entry.Name(), "session-") {
+				return nil
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				return nil
+			}
+			defer f.Close()
+			var meta struct {
+				SessionID, ProjectHash, Kind string
+				StartTime                    time.Time
+			}
+			if json.NewDecoder(io.LimitReader(f, 2<<20)).Decode(&meta) != nil {
+				return nil
+			}
+			if meta.ProjectHash == expected && meta.Kind != "subagent" && meta.SessionID != "" && !meta.StartTime.Before(since.Add(-time.Second)) && meta.StartTime.After(latest) {
+				id, latest = meta.SessionID, meta.StartTime
+			}
+			return nil
+		})
+		return id, err
 	case "kimi":
 		return discoverKimi(ctx, filepath.Join(home, ".kimi-code", "sessions"), dir, since)
 	case "codex":

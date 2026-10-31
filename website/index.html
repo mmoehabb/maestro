@@ -100,7 +100,12 @@
               <span class="sr-only">Cursor Agent</span>
             </a>
           </li>
-          </ul>
+                    <li><a class="ensemble-link" href="https://github.com/charmbracelet/crush" target="_blank" rel="noopener noreferrer" aria-label="Charm Crush" title="Charm Crush"><span class="ensemble-icon agent-icon agent-icon-crush" aria-hidden="true"></span><span class="sr-only">Charm Crush</span></a></li>
+          <li><a class="ensemble-link" href="https://kilo.ai" target="_blank" rel="noopener noreferrer" aria-label="Kilo" title="Kilo"><span class="ensemble-icon agent-icon agent-icon-kilo" aria-hidden="true"></span><span class="sr-only">Kilo</span></a></li>
+          <li><a class="ensemble-link" href="https://geminicli.com" target="_blank" rel="noopener noreferrer" aria-label="Gemini CLI" title="Gemini CLI"><span class="ensemble-icon agent-icon agent-icon-gemini" aria-hidden="true"></span><span class="sr-only">Gemini CLI</span></a></li>
+          <li><a class="ensemble-link" href="https://github.com/github/copilot-cli" target="_blank" rel="noopener noreferrer" aria-label="GitHub Copilot CLI" title="GitHub Copilot CLI"><span class="ensemble-icon agent-icon agent-icon-copilot" aria-hidden="true"></span><span class="sr-only">GitHub Copilot CLI</span></a></li>
+          <li><a class="ensemble-link" href="https://aider.chat" target="_blank" rel="noopener noreferrer" aria-label="Aider" title="Aider"><span class="ensemble-icon agent-icon agent-icon-aider" aria-hidden="true"></span><span class="sr-only">Aider</span></a></li>
+</ul>
           <ul class="marquee-track" aria-hidden="true">
           <li>
             <a class="ensemble-link" href="https://openai.com" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true">
@@ -151,7 +156,12 @@
               </svg>
             </a>
           </li>
-          </ul>
+                    <li><a class="ensemble-link" href="https://github.com/charmbracelet/crush" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true"><span class="ensemble-icon agent-icon agent-icon-crush" aria-hidden="true"></span></a></li>
+          <li><a class="ensemble-link" href="https://kilo.ai" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true"><span class="ensemble-icon agent-icon agent-icon-kilo" aria-hidden="true"></span></a></li>
+          <li><a class="ensemble-link" href="https://geminicli.com" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true"><span class="ensemble-icon agent-icon agent-icon-gemini" aria-hidden="true"></span></a></li>
+          <li><a class="ensemble-link" href="https://github.com/github/copilot-cli" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true"><span class="ensemble-icon agent-icon agent-icon-copilot" aria-hidden="true"></span></a></li>
+          <li><a class="ensemble-link" href="https://aider.chat" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true"><span class="ensemble-icon agent-icon agent-icon-aider" aria-hidden="true"></span></a></li>
+</ul>
         </div>
       </section>
 
@@ -307,7 +317,7 @@
         <div class="install-step"><div class="install-heading"><span>02</span><h3>Set the stage</h3></div><p>Install and authenticate at least one supported agent CLI separately. In a Git checkout with at least one commit, check your setup:</p><div class="code-block"><pre><code id="doctor-command">maestro doctor</code></pre><button class="copy-button" type="button" data-copy="doctor-command" aria-label="Copy setup check command" hidden>Copy</button></div></div>
         <div class="install-step"><div class="install-heading"><span>03</span><h3>Start your first session</h3></div><p>Create a task, then open Maestro to launch the agent. Use an agent you have installed; this example uses Codex.</p><div class="code-block"><pre><code id="start-command">maestro new "Fix login" -a codex -p "Repair the login flow"
 maestro</code></pre><button class="copy-button" type="button" data-copy="start-command" aria-label="Copy first session commands" hidden>Copy</button></div></div>
-        <p class="install-note">Using GitHub, GitLab, or Codeberg PR features? Authenticate with <code>gh auth login</code>, <code>glab auth login</code>, or <code>tea login add</code> (or token environment variables). Using Kimi Code? Enter your prompt inside the agent pane instead of using <code>-p</code>.</p>
+        <p class="install-note">Using GitHub, GitLab, or Codeberg PR features? Authenticate with <code>gh auth login</code>, <code>glab auth login</code>, or <code>tea login add</code> (or token environment variables). Using Kimi Code, Charm Crush, Kilo, or Aider? Enter your prompt inside the agent pane instead of using <code>-p</code>. Use <code>prefix H</code> to copy a handoff instruction for these agents.</p>
         <p id="copy-status" class="copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
       </div>
     </section>

@@ -309,3 +309,16 @@ code, kbd { font-family: var(--mono); }
 }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Local SVG masks inherit the same ink and hover color as inline logos. */
+.agent-icon {
+  background-color: currentColor;
+  -webkit-mask: var(--agent-icon) center / contain no-repeat;
+  mask: var(--agent-icon) center / contain no-repeat;
+}
+.agent-icon-crush { --agent-icon: url("./assets/icons/crush.svg"); }
+.agent-icon-kilo { --agent-icon: url("./assets/icons/kilo.svg"); }
+.agent-icon-gemini { --agent-icon: url("./assets/icons/gemini.svg"); }
+.agent-icon-copilot { --agent-icon: url("./assets/icons/copilot.svg"); }
+.agent-icon-aider { --agent-icon: url("./assets/icons/aider.svg"); }
+.agent-icon-aider { width: 64px; }

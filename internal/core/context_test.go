@@ -109,8 +109,25 @@ func TestContextAgentProcess(t *testing.T) {
 	go func() { <-signals; emit("message", "Final context saved on stop."); _ = f.Close(); os.Exit(0) }()
 	input := bufio.NewScanner(os.Stdin)
 	redraw := 0
+	progress := ""
 	for input.Scan() {
+		line := ansi.Strip(input.Text())
+		if strings.HasPrefix(line, "Wrap up this conversation") {
+			_, rest, _ := strings.Cut(line, "next steps to ")
+			dest, _, _ := strings.Cut(rest, ". Write the complete file")
+			emit("start", "Writing handoff")
+			if err := os.WriteFile(dest, []byte("The login fix is complete. Agent-written handoff. "+progress), 0o600); err != nil {
+				os.Exit(3)
+			}
+			emit("done", "Handoff ready")
+			fmt.Println("handoff ready")
+			continue
+		}
 		switch ansi.Strip(input.Text()) {
+		case "progress":
+			progress = "Progress persisted before restart."
+			emit("message", progress)
+			fmt.Println(progress)
 		case "work":
 			emit("start", "Continue the task.")
 			fmt.Println("working")
@@ -200,6 +217,7 @@ waitFailure:
 func contextRuntime(t *testing.T) (*core.TaskService, *core.Runtime, store.Task) {
 	t.Helper()
 	t.Setenv("MAESTRO_CONTEXT_HELPER", "1")
+	configureFakeAgentRace(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -248,7 +266,7 @@ func TestTaskBasePreservesGitContext(t *testing.T) {
 	for _, base := range []string{"HEAD", "@", "HEAD~1", "main~1", "main", "origin/main", "detached default"} {
 		t.Run(base, func(t *testing.T) {
 			s, r, _ := contextRuntime(t)
-			ctx := context.Background()
+			ctx := contextTestContext(t)
 			testutil.Git(t, s.Repo.Root, "commit", "--allow-empty", "-m", "advance source")
 			testutil.Git(t, s.Repo.Root, "update-ref", "refs/remotes/origin/main", "HEAD")
 			requested := base
@@ -296,7 +314,7 @@ func TestTaskBasePreservesGitContext(t *testing.T) {
 
 func TestContextSwitchResumeAndHistorySurvivesDeletion(t *testing.T) {
 	s, r, task := contextRuntime(t)
-	ctx := context.Background()
+	ctx := contextTestContext(t)
 	p, err := r.Start(task, 80, 24, false)
 	if err != nil {
 		t.Fatal(err)
@@ -313,9 +331,11 @@ func TestContextSwitchResumeAndHistorySurvivesDeletion(t *testing.T) {
 	if p.Snapshot(false).State != term.Working {
 		t.Fatal("native work completed on silence", p.Snapshot(true))
 	}
-	if _, err = r.Switch(ctx, task, "agy", 80, 24, false); !errors.Is(err, core.ErrInterruptRequired) {
-		t.Fatal("working switch lacked confirmation", err)
+	waitCtx, cancelWait := context.WithTimeout(ctx, 300*time.Millisecond)
+	if _, err = r.Switch(waitCtx, task, "agy", 80, 24, false); !errors.Is(err, context.Canceled) {
+		t.Fatal("busy switch did not wait", err)
 	}
+	cancelWait()
 	sendLine(p, "done")
 	awaitPane(t, p, term.Done, "complete")
 	p, err = r.Switch(ctx, task, "agy", 80, 24, false)
@@ -390,7 +410,7 @@ func TestContextSwitchResumeAndHistorySurvivesDeletion(t *testing.T) {
 
 func TestSwitchPreflightAndPendingRecovery(t *testing.T) {
 	s, r, task := contextRuntime(t)
-	ctx := context.Background()
+	ctx := contextTestContext(t)
 	p, err := r.Start(task, 80, 24, false)
 	if err != nil {
 		t.Fatal(err)
@@ -405,8 +425,7 @@ func TestSwitchPreflightAndPendingRecovery(t *testing.T) {
 		t.Fatal("preflight stopped outgoing process")
 	default:
 	}
-	// A filesystem failure occurs after the outgoing process stops. The persisted
-	// pending handoff must survive and be consumed on retry without losing context.
+	// A publication failure must leave the outgoing conversation selected and alive.
 	dir := filepath.Join(task.Worktree, ".maestro", "local")
 	if err = os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -419,25 +438,22 @@ func TestSwitchPreflightAndPendingRecovery(t *testing.T) {
 		t.Fatal("invalid handoff destination accepted")
 	}
 	pending, err := s.Store.PendingHandoff(ctx, task.ID)
-	if err != nil || pending.Agent != "agy" || pending.ID == 0 {
+	if err != nil || pending.ID != 0 {
 		t.Fatal(pending, err)
 	}
 	if err = os.Remove(blocked); err != nil {
 		t.Fatal(err)
 	}
-	// A configuration change during recovery must not consume the pending handoff.
-	original := s.Config.Agents["agy"]
-	broken := original
-	broken.New = broken.New[:len(broken.New)-1]
-	s.Config.Agents["agy"] = broken
-	if _, err = r.Start(task, 80, 24, false); err == nil || !strings.Contains(err.Error(), "cannot deliver the prompt") {
-		t.Fatal(err)
+	select {
+	case <-p.Done():
+		t.Fatal("publication failure stopped outgoing agent")
+	default:
 	}
-	if saved, e := s.Store.PendingHandoff(ctx, task.ID); e != nil || saved.ID != pending.ID {
-		t.Fatal("pending handoff consumed without delivery", saved, e)
+	current, err := s.Find(ctx, task.Slug)
+	if err != nil || current.Agent != task.Agent {
+		t.Fatal("failed publication changed agent", current, err)
 	}
-	s.Config.Agents["agy"] = original
-	p, err = r.Start(task, 80, 24, false)
+	p, err = r.Switch(ctx, task, "agy", 80, 24, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +482,7 @@ func TestConcurrentStopSwitchAndClose(t *testing.T) {
 	awaitPane(t, p, term.Done, "ready codex new")
 	var wg sync.WaitGroup
 	wg.Go(func() { r.Stop(task.ID) })
-	wg.Go(func() { _, _ = r.Switch(context.Background(), task, "agy", 80, 24, true) })
+	wg.Go(func() { _, _ = r.Switch(contextTestContext(t), task, "agy", 80, 24, true) })
 	wg.Go(func() { _ = r.Close() })
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()
@@ -487,7 +503,7 @@ func TestManualPromptSwitchAndFreshRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitPane(t, p, term.Done, "ready codex new")
-	p, err = r.Switch(context.Background(), task, "agy", 80, 24, false)
+	p, err = r.Switch(contextTestContext(t), task, "agy", 80, 24, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +520,7 @@ func TestManualPromptSwitchAndFreshRestart(t *testing.T) {
 
 func TestSwitchFreshRecoversSelectedTarget(t *testing.T) {
 	s, r, task := contextRuntime(t)
-	ctx := context.Background()
+	ctx := contextTestContext(t)
 	target := task
 	target.Agent = "agy"
 	// A historical target launch for which identity discovery never succeeded.
@@ -528,9 +544,13 @@ func TestSwitchFreshRecoversSelectedTarget(t *testing.T) {
 	}
 	sendLine(p, "work")
 	time.Sleep(1200 * time.Millisecond)
-	if _, err = r.SwitchFresh(ctx, task, "agy", 80, 24, false); !errors.Is(err, core.ErrInterruptRequired) {
+	waitCtx, cancelWait := context.WithTimeout(ctx, 300*time.Millisecond)
+	if _, err = r.SwitchFresh(waitCtx, task, "agy", 80, 24, false); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
+	cancelWait()
+	sendLine(p, "done")
+	awaitPane(t, p, term.Done, "complete")
 	fresh, err := r.SwitchFresh(ctx, task, "agy", 80, 24, true)
 	if err != nil {
 		t.Fatal(err)
@@ -549,7 +569,7 @@ func TestFreshRestartPreservesPendingContext(t *testing.T) {
 	for _, mode := range []string{"switch", "restart"} {
 		t.Run(mode, func(t *testing.T) {
 			s, r, task := contextRuntime(t)
-			ctx := context.Background()
+			ctx := contextTestContext(t)
 			p, err := r.Start(task, 80, 24, false)
 			if err != nil {
 				t.Fatal(err)
@@ -564,6 +584,33 @@ func TestFreshRestartPreservesPendingContext(t *testing.T) {
 			if err != nil || pending.ID == 0 {
 				t.Fatal("expected unacknowledged handoff", pending, err)
 			}
+			// Save progress without starting a new turn, so the incoming handoff
+			// remains unacknowledged. Do not depend on a shutdown signal handler.
+			const progress = "Progress persisted before restart."
+			sendLine(p, "progress")
+			awaitPane(t, p, term.Done, progress)
+			for {
+				history, e := s.History(ctx, task.Slug)
+				if e != nil {
+					t.Fatal(e)
+				}
+				saved := false
+				for _, turn := range history.Turns {
+					if strings.Contains(turn.Content, progress) {
+						saved = true
+						break
+					}
+				}
+				if saved {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					t.Fatal("progress was not persisted", ctx.Err())
+				case <-time.After(20 * time.Millisecond):
+				}
+			}
+
 			if mode == "switch" {
 				p, err = r.SwitchFresh(ctx, task, "agy", 80, 24, true)
 			} else {
@@ -577,8 +624,8 @@ func TestFreshRestartPreservesPendingContext(t *testing.T) {
 				t.Fatal("fresh agent did not receive handoff instruction")
 			}
 			content, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "local", "handoff.md"))
-			if err != nil || !strings.Contains(string(content), "Final context saved on stop.") {
-				t.Fatal("fresh handoff lost final output", string(content), err)
+			if err != nil || !strings.Contains(string(content), progress) {
+				t.Fatal("fresh handoff lost persisted progress", string(content), err)
 			}
 			history, err := s.History(ctx, task.Slug)
 			if err != nil || len(history.Handoffs) != 2 || history.Handoffs[0].DeliveredAt == nil || history.Handoffs[1].DeliveredAt != nil {
@@ -588,61 +635,9 @@ func TestFreshRestartPreservesPendingContext(t *testing.T) {
 	}
 }
 
-func TestPendingHandoffRetryUsesCurrentContext(t *testing.T) {
-	for _, mode := range []string{"switch", "resume", "fresh"} {
-		t.Run(mode, func(t *testing.T) {
-			s, r, task := contextRuntime(t)
-			ctx := context.Background()
-			p, err := r.Start(task, 80, 24, false)
-			if err != nil {
-				t.Fatal(err)
-			}
-			awaitPane(t, p, term.Done, "ready codex new")
-			path := filepath.Join(task.Worktree, ".maestro", "local", "handoff.md")
-			if err = os.MkdirAll(path, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			if _, err = r.Switch(ctx, task, "agy", 80, 24, true); err == nil {
-				t.Fatal("expected handoff write failure")
-			}
-			pending, err := s.Store.PendingHandoff(ctx, task.ID)
-			if err != nil || pending.ID == 0 || pending.FromSession == 0 {
-				t.Fatal("failed switch did not retain its source context", pending, err)
-			}
-			notes := "Updated requirement: preserve API compatibility."
-			if err = r.SetNotes(ctx, task, notes); err != nil {
-				t.Fatal(err)
-			}
-			if err = os.WriteFile(filepath.Join(task.Worktree, "retry-context.txt"), []byte("new work after the failed switch"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			if err = os.Remove(path); err != nil {
-				t.Fatal(err)
-			}
-			if mode == "switch" {
-				p, err = r.Switch(ctx, task, "agy", 80, 24, true)
-			} else {
-				p, err = r.Start(task, 80, 24, mode == "fresh")
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			awaitPane(t, p, term.Done, "ready agy new")
-			content, err := os.ReadFile(path)
-			if err != nil || !strings.Contains(string(content), notes) || !strings.Contains(string(content), "retry-context.txt") {
-				t.Fatal("retry handoff omitted current notes or Git state", string(content), err)
-			}
-			saved, err := s.Store.PendingHandoff(ctx, task.ID)
-			if err != nil || saved.ID != pending.ID || saved.FromSession != pending.FromSession || saved.Content != string(content) {
-				t.Fatal("retry did not refresh the existing handoff", saved, err)
-			}
-		})
-	}
-}
-
 func TestSwitchSessionCreationFailureRetainsHandoff(t *testing.T) {
 	s, r, task := contextRuntime(t)
-	ctx := context.Background()
+	ctx := contextTestContext(t)
 	p, err := r.Start(task, 80, 24, false)
 	if err != nil {
 		t.Fatal(err)
@@ -731,9 +726,9 @@ func TestNativeActivityRecoversSnapshot(t *testing.T) {
 	}
 }
 
-func TestMalformedHistoryKeepsTerminalHandoff(t *testing.T) {
+func TestMalformedHistoryStillAllowsAgentWrittenHandoff(t *testing.T) {
 	s, r, task := contextRuntime(t)
-	ctx := context.Background()
+	ctx := contextTestContext(t)
 	p, err := r.Start(task, 80, 24, false)
 	if err != nil {
 		t.Fatal(err)
@@ -769,7 +764,7 @@ func TestMalformedHistoryKeepsTerminalHandoff(t *testing.T) {
 		t.Fatal("partial import marked complete")
 	}
 	b, err := os.ReadFile(filepath.Join(task.Worktree, ".maestro", "local", "handoff.md"))
-	if err != nil || !strings.Contains(string(b), "[terminal") || !strings.Contains(string(b), "working") || !strings.Contains(string(b), "The login fix is complete.") {
+	if err != nil || !strings.Contains(string(b), "Agent-written handoff.") {
 		t.Fatal(string(b), err)
 	}
 }
@@ -778,7 +773,7 @@ func TestSwitchRejectsUndeliverableHandoff(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		t.Run(fmt.Sprintf("resume=%t", resume), func(t *testing.T) {
 			s, r, task := contextRuntime(t)
-			ctx := context.Background()
+			ctx := contextTestContext(t)
 			if resume {
 				target := task
 				target.Agent = "agy"
@@ -834,7 +829,7 @@ func TestSwitchRejectsUndeliverableHandoff(t *testing.T) {
 
 func TestStartupCrashRetainsHandoffAcrossRestart(t *testing.T) {
 	s, r, task := contextRuntime(t)
-	ctx := context.Background()
+	ctx := contextTestContext(t)
 	p, err := r.Start(task, 80, 24, false)
 	if err != nil {
 		t.Fatal(err)
@@ -899,7 +894,7 @@ func TestStartupCrashRetainsHandoffAcrossRestart(t *testing.T) {
 
 func TestNotesPersistAndReachNextAgent(t *testing.T) {
 	s, r, task := contextRuntime(t)
-	ctx := context.Background()
+	ctx := contextTestContext(t)
 	notes := "Keep API compatibility.\nTODO: cover session expiry."
 	if err := s.SetNotes(ctx, task.Slug, "outside writer"); err == nil {
 		t.Fatal("CLI notes bypassed runtime lock")
@@ -944,12 +939,13 @@ func TestNotesPersistAndReachNextAgent(t *testing.T) {
 func TestGenericHandoffAcknowledgesLiveStartup(t *testing.T) {
 	s, r, task := contextRuntime(t)
 	t.Setenv("MAESTRO_TEST_HELPER", "1")
+	configureFakeAgentRace(t)
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.Config.Agents["fake"] = config.Agent{Cmd: exe, GenerateSessionID: true, New: []string{"-test.run=^TestAgentProcess$", "--", "new", "{{.SessionID}}", "{{.Prompt}}"}, Resume: []string{"-test.run=^TestAgentProcess$", "--", "resume", "{{.SessionID}}", "{{.Prompt}}"}}
-	p, err := r.Switch(context.Background(), task, "fake", 80, 24, false)
+	p, err := r.Switch(contextTestContext(t), task, "fake", 80, 24, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -970,4 +966,33 @@ func TestGenericHandoffAcknowledgesLiveStartup(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("generic handoff not acknowledged after live startup")
+}
+
+func TestPendingHandoffRetargetPreservesContent(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	ctx := contextTestContext(t)
+	const content = "Agent-authored decisions and next steps."
+	if err := s.Store.PrepareHandoff(ctx, task.ID, 0, "agy", content); err != nil {
+		t.Fatal(err)
+	}
+	p, err := r.Switch(ctx, task, "codex", 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready codex new")
+	latest, err := s.Find(ctx, task.Slug)
+	if err != nil || latest.Agent != "codex" {
+		t.Fatal("retarget did not persist task agent", latest, err)
+	}
+	h, err := s.Store.History(ctx, latest)
+	if err != nil || len(h.Handoffs) != 1 || h.Handoffs[0].Agent != "codex" || h.Handoffs[0].Content != content || h.Handoffs[0].ToSession == 0 {
+		t.Fatal("retarget lost handoff association or content", h.Handoffs, err)
+	}
+}
+
+func contextTestContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	t.Cleanup(cancel)
+	return ctx
 }

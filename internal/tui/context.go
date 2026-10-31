@@ -98,13 +98,21 @@ func (m *Model) switchTaskPending(task store.Task, target string, confirmed bool
 		m.switcher.err = ""
 	}
 	cols, rows := m.size()
+	ctx, cancel := context.WithCancel(context.Background())
+	for i := range m.tabs {
+		if m.tabs[i].task.ID == task.ID {
+			m.tabs[i].switchCancel = cancel
+		}
+	}
+	m.switcher = nil
 	return func() tea.Msg {
+		defer cancel()
 		var p *term.Pane
 		var err error
 		if fresh {
-			p, err = m.runtime.SwitchFresh(context.Background(), task, target, cols, rows, confirmed)
+			p, err = m.runtime.SwitchFresh(ctx, task, target, cols, rows, confirmed)
 		} else {
-			p, err = m.runtime.Switch(context.Background(), task, target, cols, rows, confirmed)
+			p, err = m.runtime.Switch(ctx, task, target, cols, rows, confirmed)
 		}
 		latest, e := m.service.Find(context.Background(), task.Slug)
 		if e == nil {
@@ -115,17 +123,7 @@ func (m *Model) switchTaskPending(task store.Task, target string, confirmed bool
 }
 
 func (m *Model) summarizeAndSwitch(task store.Task, target string, fresh bool) tea.Cmd {
-	for i := range m.tabs {
-		if m.tabs[i].task.ID == task.ID {
-			m.tabs[i].pendingHandoff = target
-			m.tabs[i].pendingHandoffFresh = fresh
-			if m.tabs[i].pane != nil {
-				m.tabs[i].pane.Paste("Please summarize your progress and next steps for the next agent, then exit.\n")
-			}
-		}
-	}
-	m.switcher = nil
-	return nil
+	return m.switchTaskPending(task, target, false, fresh)
 }
 
 func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -369,6 +367,8 @@ func (m *Model) contextMessage(msg tea.Msg) bool {
 				continue
 			}
 			t.pending = false
+			t.switchCancel = nil
+			t.switchProgress = ""
 			t.task = msg.task
 			if msg.err == nil {
 				t.attachPane(msg.pane)

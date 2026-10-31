@@ -141,7 +141,22 @@ func TestFreshTargetConfirmationFromCLI(t *testing.T) {
 		t.Fatal("cancel retained fresh-start consent")
 	}
 	m.contextMessage(switchedMsg{id: task.ID, task: task, target: "agy", err: core.ErrFreshStartRequired})
-	if cmd := m.switchKey(tea.KeyPressMsg{Code: 'y'}); cmd == nil || !m.switcher.busy {
+	if cmd := m.switchKey(tea.KeyPressMsg{Code: 'y'}); cmd == nil || m.switcher != nil || m.tabs[0].switchCancel == nil {
 		t.Fatal("confirmation did not schedule switch")
+	}
+}
+
+func TestHandoffCancellationRemainsAvailable(t *testing.T) {
+	m := testModel(t)
+	cancelled := false
+	m.tabs[0].pending = true
+	m.tabs[0].switchCancel = func() { cancelled = true }
+	_, _ = m.Update(tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl})
+	if !cancelled {
+		t.Fatal("pending switch swallowed cancellation")
+	}
+	m.contextMessage(switchedMsg{id: m.tabs[0].task.ID, task: m.tabs[0].task, err: fmt.Errorf("cancelled")})
+	if m.tabs[0].switchCancel != nil || m.tabs[0].pending {
+		t.Fatal("completed switch retained cancellation state")
 	}
 }

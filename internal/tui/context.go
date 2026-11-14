@@ -23,6 +23,8 @@ type switchDialog struct {
 	selected       int
 	confirm, busy  bool
 	fresh          bool
+	force          bool
+	offerForce     bool
 	err            string
 	offset         int
 	scrolled       bool
@@ -33,6 +35,7 @@ type switchedMsg struct {
 	pane   *term.Pane
 	task   store.Task
 	err    error
+	force  bool
 }
 type historyMsg struct {
 	slug    string
@@ -51,6 +54,7 @@ type historyView struct {
 }
 
 func (m *Model) SetSwitchAgent(name string) { m.initialAgent = name }
+func (m *Model) SetForceSwitch(force bool)  { m.initialForce = force }
 func (m *Model) openSwitch() tea.Cmd {
 	if len(m.tabs) == 0 || m.tabs[m.active].pending {
 		return nil
@@ -82,10 +86,11 @@ func (m *Model) openSwitch() tea.Cmd {
 
 func (m *Model) switchTask(task store.Task, target string, confirmed bool) tea.Cmd {
 	fresh := m.switcher != nil && m.switcher.fresh
-	return m.switchTaskPending(task, target, confirmed, fresh)
+	force := m.switcher != nil && m.switcher.force
+	return m.switchTaskPending(task, target, confirmed, fresh, force)
 }
 
-func (m *Model) switchTaskPending(task store.Task, target string, confirmed bool, fresh bool) tea.Cmd {
+func (m *Model) switchTaskPending(task store.Task, target string, confirmed, fresh, force bool) tea.Cmd {
 	for i := range m.tabs {
 		if m.tabs[i].task.ID == task.ID {
 			m.tabs[i].pending = true
@@ -109,21 +114,40 @@ func (m *Model) switchTaskPending(task store.Task, target string, confirmed bool
 		defer cancel()
 		var p *term.Pane
 		var err error
-		if fresh {
+		switch {
+		case force:
+			p, err = m.runtime.SwitchForce(ctx, task, target, cols, rows, fresh)
+		case fresh:
 			p, err = m.runtime.SwitchFresh(ctx, task, target, cols, rows, confirmed)
-		} else {
+		default:
 			p, err = m.runtime.Switch(ctx, task, target, cols, rows, confirmed)
 		}
 		latest, e := m.service.Find(context.Background(), task.Slug)
 		if e == nil {
 			task = latest
 		}
-		return switchedMsg{target: target, id: task.ID, pane: p, task: task, err: err}
+		return switchedMsg{target: target, id: task.ID, pane: p, task: task, err: err, force: force}
 	}
 }
 
 func (m *Model) summarizeAndSwitch(task store.Task, target string, fresh bool) tea.Cmd {
-	return m.switchTaskPending(task, target, false, fresh)
+	return m.switchTaskPending(task, target, false, fresh, false)
+}
+
+// forceOfferReason explains why an agent-written handoff did not complete, or
+// returns "" when a forced switch would not help.
+func forceOfferReason(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, core.ErrHandoffFailed):
+		return err.Error()
+	case errors.Is(err, context.Canceled):
+		return "Switch cancelled before the current agent wrote its handoff."
+	case errors.Is(err, context.DeadlineExceeded):
+		return "Timed out waiting for the current agent to write its handoff."
+	}
+	return ""
 }
 
 func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -145,15 +169,26 @@ func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
 	if d.confirm {
 		switch msg.String() {
 		case "y", "enter":
+			if d.offerForce {
+				d.force = true
+				d.offerForce = false
+			}
 			return m.switchTask(d.task, d.agents[d.selected], true)
 		case "s":
-			target := d.agents[d.selected]
-			if target != d.task.Agent || d.fresh {
-				return m.summarizeAndSwitch(d.task, target, d.fresh)
+			if !d.offerForce && !d.force {
+				target := d.agents[d.selected]
+				if target != d.task.Agent || d.fresh {
+					return m.summarizeAndSwitch(d.task, target, d.fresh)
+				}
 			}
 		case "n", "esc":
+			if d.offerForce {
+				m.switcher = nil
+				return nil
+			}
 			d.confirm = false
 			d.fresh = false
+			d.force = false
 			d.err = ""
 			d.offset = 0
 			d.scrolled = false
@@ -169,6 +204,18 @@ func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "down", "j":
 		d.selected = (d.selected + 1) % len(d.agents)
 		d.scrolled = false
+	case "f":
+		target := d.agents[d.selected]
+		if target == d.task.Agent {
+			d.err = "Already using this agent; use prefix R for a fresh session"
+			return nil
+		}
+		d.force = true
+		d.offerForce = true
+		d.confirm = true
+		d.err = ""
+		d.offset = 0
+		d.scrolled = false
 	case "enter":
 		return m.switchTask(d.task, d.agents[d.selected], false)
 	}
@@ -178,15 +225,21 @@ func (m *Model) switchKey(msg tea.KeyPressMsg) tea.Cmd {
 func (d *switchDialog) View(width, height int) string {
 	width, height = max(1, width), max(1, height)
 	header := ansi.Truncate("Switch agent · "+d.task.Slug, width, "…")
-	footer := "↑/↓ select · Enter switch · Esc cancel"
+	footer := "↑/↓ select · Enter switch · f force · Esc cancel"
 	var lines []string
 	if d.confirm {
 		prompt := "The agent is active. Interrupt it and switch?"
+		footer = "y/Enter confirm · s summarize · Esc cancel"
 		if d.fresh {
 			prompt = "No saved session ID. Stop the current agent and start a fresh session with a handoff?"
+			if d.force {
+				footer = "y/Enter confirm · Esc cancel"
+			}
+		} else if d.offerForce {
+			prompt = fmt.Sprintf("Force switch to %s? The current agent is stopped now without writing its own handoff. Maestro hands off using saved history (goal, notes, conversation, Git state).", d.agents[d.selected])
+			footer = "y/Enter force switch · Esc cancel"
 		}
 		lines = strings.Split(ansi.Wrap(prompt+"\n\nTarget: "+d.agents[d.selected], width, ""), "\n")
-		footer = "y/Enter confirm · s summarize · Esc cancel"
 	} else {
 		for i, label := range d.labels {
 			mark := "  "
@@ -377,7 +430,7 @@ func (m *Model) contextMessage(msg tea.Msg) bool {
 					c, r := m.size()
 					_ = msg.pane.Resize(c, r)
 				}
-			} else if !errors.Is(msg.err, core.ErrInterruptRequired) && !errors.Is(msg.err, core.ErrFreshStartRequired) {
+			} else if !errors.Is(msg.err, core.ErrInterruptRequired) && !errors.Is(msg.err, core.ErrFreshStartRequired) && !errors.Is(msg.err, context.Canceled) && (msg.force || forceOfferReason(msg.err) == "") {
 				t.err = msg.err
 			}
 		}
@@ -387,10 +440,25 @@ func (m *Model) contextMessage(msg tea.Msg) bool {
 			}
 			m.switcher.confirm = true
 			m.switcher.fresh = errors.Is(msg.err, core.ErrFreshStartRequired)
+			// Keep a requested force switch through the fresh-session prompt.
+			m.switcher.force = msg.force
 			m.switcher.busy = false
 			m.switcher.offset = 0
 			m.switcher.scrolled = false
 			return true
+		}
+		if !msg.force && msg.target != "" && msg.target != msg.task.Agent {
+			if reason := forceOfferReason(msg.err); reason != "" {
+				m.switcher = &switchDialog{
+					task:       msg.task,
+					agents:     []string{msg.target},
+					labels:     []string{msg.target},
+					confirm:    true,
+					offerForce: true,
+					err:        reason,
+				}
+				return true
+			}
 		}
 		if msg.err != nil {
 			if m.switcher != nil {

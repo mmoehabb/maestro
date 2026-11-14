@@ -70,7 +70,7 @@ notifications and uses temporary repositories and data directories.
    empty lists, and task-list overflow. Check Enter, Ctrl+C, prefix fallback,
    and mouse input still reach the agent outside Maestro views.
    Include enough custom agents to overflow the switch list and test the
-   fresh-session confirmation, long errors, PgUp/PgDn, and cancel behavior.
+   fresh-session confirmation, force-switch confirmation, long errors, PgUp/PgDn, and cancel behavior.
 
 Repeat terminal and notification checks on Linux, macOS, and Windows. A
 cross-build confirms compilation only; it does not establish native delivery.

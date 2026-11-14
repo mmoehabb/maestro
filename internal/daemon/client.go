@@ -206,16 +206,20 @@ func (c *Client) Start(task store.Task, cols, rows int, fresh bool) (*term.Pane,
 }
 
 func (c *Client) Switch(ctx context.Context, t store.Task, target string, cols, rows int, confirmed bool) (*term.Pane, error) {
-	return c.switchAgent(ctx, t, target, cols, rows, confirmed, false)
+	return c.switchAgent(ctx, t, target, cols, rows, confirmed, false, false)
 }
 
 func (c *Client) SwitchFresh(ctx context.Context, t store.Task, target string, cols, rows int, confirmed bool) (*term.Pane, error) {
-	return c.switchAgent(ctx, t, target, cols, rows, confirmed, true)
+	return c.switchAgent(ctx, t, target, cols, rows, confirmed, true, false)
 }
 
-func (c *Client) switchAgent(ctx context.Context, t store.Task, target string, cols, rows int, confirmed, fresh bool) (*term.Pane, error) {
+func (c *Client) SwitchForce(ctx context.Context, t store.Task, target string, cols, rows int, fresh bool) (*term.Pane, error) {
+	return c.switchAgent(ctx, t, target, cols, rows, true, fresh, true)
+}
+
+func (c *Client) switchAgent(ctx context.Context, t store.Task, target string, cols, rows int, confirmed, fresh, force bool) (*term.Pane, error) {
 	var state paneState
-	err := c.Call(ctx, "switch", core.Request{Task: t, Text: target, Cols: cols, Rows: rows, Confirmed: confirmed, Fresh: fresh}, &state)
+	err := c.Call(ctx, "switch", core.Request{Task: t, Text: target, Cols: cols, Rows: rows, Confirmed: confirmed, Fresh: fresh, Force: force}, &state)
 	if err != nil {
 		return nil, err
 	}

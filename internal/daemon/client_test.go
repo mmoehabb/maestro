@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -23,5 +25,16 @@ func TestInputQueueFailsVisiblyAndStopsAccepting(t *testing.T) {
 	<-c.input
 	if err := c.enqueue(request{Method: "input"}); err == nil {
 		t.Fatal("accepted input after overflow")
+	}
+}
+
+func TestResponseErrorMapsHandoffFailed(t *testing.T) {
+	r := result(nil, fmt.Errorf("failed: %w", core.ErrHandoffFailed))
+	if r.Code != "handoff" {
+		t.Fatalf("expected code handoff, got %q", r.Code)
+	}
+	err := responseError(r)
+	if !errors.Is(err, core.ErrHandoffFailed) {
+		t.Fatalf("expected ErrHandoffFailed, got %v", err)
 	}
 }

@@ -88,6 +88,7 @@ type Model struct {
 	forgeUI                                                   *forgeDialog
 	cleanupQueue                                              []store.Task
 	initialAgent, manualInstruction                           string
+	initialForce                                              bool
 	switcher                                                  *switchDialog
 	history                                                   *historyView
 	notes                                                     *notesDialog
@@ -274,7 +275,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.active = len(m.tabs) - 1
 			}
 			if task.Slug == m.focus && m.initialAgent != "" {
-				cmds = append(cmds, m.switchTask(task, m.initialAgent, false))
+				cmds = append(cmds, m.switchTaskPending(task, m.initialAgent, false, false, m.initialForce))
 			} else {
 				cmds = append(cmds, m.launch(len(m.tabs)-1, false))
 			}
@@ -398,7 +399,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						fresh := m.tabs[i].pendingHandoffFresh
 						m.tabs[i].pendingHandoff = ""
 						m.tabs[i].pendingHandoffFresh = false
-						switchCmd := m.switchTaskPending(m.tabs[i].task, target, true, fresh)
+						switchCmd := m.switchTaskPending(m.tabs[i].task, target, true, fresh, false)
 						if reconcile == nil {
 							reconcile = switchCmd
 						} else {

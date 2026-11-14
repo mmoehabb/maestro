@@ -12,14 +12,14 @@ type Caller interface {
 	Call(context.Context, string, Request, any) error
 }
 type Request struct {
-	Slug, Text, Action                string
-	TaskID, Generation                int64
-	Task                              store.Task
-	New                               NewTask
-	Options                           WorkflowOptions
-	IDs                               []int64
-	Cols, Rows                        int
-	Fresh, Confirmed, Ensure, Replace bool
+	Slug, Text, Action                       string
+	TaskID, Generation                       int64
+	Task                                     store.Task
+	New                                      NewTask
+	Options                                  WorkflowOptions
+	IDs                                      []int64
+	Cols, Rows                               int
+	Fresh, Confirmed, Ensure, Replace, Force bool
 }
 
 func (r *Runtime) EventStream() <-chan Event { return r.Events }

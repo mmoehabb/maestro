@@ -54,10 +54,12 @@ func newHistoryCmd() *cobra.Command {
 
 func newSwitchCmd() *cobra.Command {
 	var target string
+	var force bool
 	cmd := &cobra.Command{Use: "switch <task> -a <agent>", Short: "Open the TUI and switch agents with a context handoff", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return app.RunSwitch(cmd.Context(), ".", args[0], target, cmd.OutOrStdout())
+		return app.RunSwitch(cmd.Context(), ".", args[0], target, force, cmd.OutOrStdout())
 	}}
 	cmd.Flags().StringVarP(&target, "agent", "a", "", "Configured target agent")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Skip the outgoing agent's handoff and use Maestro's saved history")
 	_ = cmd.MarkFlagRequired("agent")
 	return cmd
 }

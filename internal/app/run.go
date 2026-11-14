@@ -17,10 +17,10 @@ import (
 )
 
 func Run(ctx context.Context, dir, focus string, output io.Writer) error {
-	return RunSwitch(ctx, dir, focus, "", output)
+	return RunSwitch(ctx, dir, focus, "", false, output)
 }
 
-func RunSwitch(ctx context.Context, dir, focus, target string, output io.Writer) (err error) {
+func RunSwitch(ctx context.Context, dir, focus, target string, force bool, output io.Writer) (err error) {
 	if !xterm.IsTerminal(os.Stdin.Fd()) {
 		return errors.New("the TUI needs an interactive terminal; use maestro ls --json for scripts")
 	}
@@ -60,6 +60,7 @@ func RunSwitch(ctx context.Context, dir, focus, target string, output io.Writer)
 	s.Remote = r
 	model := tui.New(s, r, focus)
 	model.SetSwitchAgent(target)
+	model.SetForceSwitch(force)
 	model.SetNotifier(notify.Desktop{})
 	_, err = tea.NewProgram(model, tea.WithContext(ctx), tea.WithInput(os.Stdin), tea.WithOutput(output)).Run()
 	return err

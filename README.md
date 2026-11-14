@@ -401,9 +401,12 @@ are trimmed, with omission markers. Terminal snapshots retain their newest lines
 and remain in the handoff when native history could not be fully imported.
 When switching an existing conversation, Maestro waits for the current turn and asks
 the outgoing agent to write a fresh handoff before stopping it. Approval prompts
-remain interactive; press Ctrl+G to cancel the switch. Tasks with no outgoing
-conversation use their saved task context. Failed launches retain the handoff for
-retry, including when selecting another target agent.
+remain interactive; press Ctrl+G to cancel the switch (which offers a force switch
+if needed). If the outgoing agent cannot write a handoff (e.g. out of credits or
+rate-limited), press `f` in the switch dialog or run `maestro switch <task> -a <agent> --force`
+to stop it immediately and hand off using Maestro's saved history instead. Tasks with
+no outgoing conversation use their saved task context. Failed launches retain the
+handoff for retry, including when selecting another target agent.
 
 Use `prefix n` to edit multiline task notes. Ctrl+S saves them and Escape cancels;
 notes are kept in SQLite and included in subsequent handoffs. Outside the TUI,

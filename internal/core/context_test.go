@@ -113,6 +113,13 @@ func TestContextAgentProcess(t *testing.T) {
 	for input.Scan() {
 		line := ansi.Strip(input.Text())
 		if strings.HasPrefix(line, "Wrap up this conversation") {
+			if os.Getenv("MAESTRO_NO_CREDITS_AGENT") == kind {
+				// An exhausted account answers instantly without writing the file.
+				emit("start", "Writing handoff")
+				fmt.Println("error: you have no credits left")
+				emit("done", "No credits")
+				continue
+			}
 			_, rest, _ := strings.Cut(line, "next steps to ")
 			dest, _, _ := strings.Cut(rest, ". Write the complete file")
 			emit("start", "Writing handoff")
@@ -988,6 +995,114 @@ func TestPendingHandoffRetargetPreservesContent(t *testing.T) {
 	if err != nil || len(h.Handoffs) != 1 || h.Handoffs[0].Agent != "codex" || h.Handoffs[0].Content != content || h.Handoffs[0].ToSession == 0 {
 		t.Fatal("retarget lost handoff association or content", h.Handoffs, err)
 	}
+}
+
+func TestSwitchReportsHandoffFailureWhenTurnEndsWithoutFile(t *testing.T) {
+	t.Setenv("MAESTRO_NO_CREDITS_AGENT", "codex")
+	core.SetHandoffDoneGrace(t, 500*time.Millisecond)
+	s, r, task := contextRuntime(t)
+	ctx := contextTestContext(t)
+	p, err := r.Start(task, 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready codex new")
+	started := time.Now()
+	if _, err = r.Switch(ctx, task, "agy", 80, 24, false); !errors.Is(err, core.ErrHandoffFailed) {
+		t.Fatalf("expected ErrHandoffFailed, got %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 8*time.Second {
+		t.Fatalf("handoff failure took %s to report", elapsed)
+	}
+	current, err := s.Find(ctx, task.Slug)
+	if err != nil || current.Agent != "codex" {
+		t.Fatal("failed handoff changed the task agent", current, err)
+	}
+	if p.Snapshot(false).State == term.Exited {
+		t.Fatal("failed handoff stopped the outgoing agent")
+	}
+	if pending, err := s.Store.PendingHandoff(ctx, task.ID); err != nil || pending.ID != 0 {
+		t.Fatal("failed handoff left a pending handoff", pending, err)
+	}
+	// The stuck user can now force the switch.
+	switched, err := r.SwitchForce(ctx, task, "agy", 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, switched, term.Done, "ready agy new")
+	if current, err = s.Find(ctx, task.Slug); err != nil || current.Agent != "agy" {
+		t.Fatal(current, err)
+	}
+}
+
+func TestSwitchForceSkipsAgentHandoff(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	ctx := contextTestContext(t)
+	p, err := r.Start(task, 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready codex new")
+	sendLine(p, "work")
+	time.Sleep(300 * time.Millisecond)
+
+	switched, err := r.SwitchForce(ctx, task, "agy", 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, switched, term.Done, "ready agy new")
+	current, err := s.Find(ctx, task.Slug)
+	if err != nil || current.Agent != "agy" {
+		t.Fatal(current, err)
+	}
+	if !strings.Contains(strings.ReplaceAll(strings.Join(switched.Scrollback(), ""), "\n", ""), "handoff.md first") {
+		t.Fatalf("target did not receive handoff. Got: %s", strings.Join(switched.Scrollback(), "\n"))
+	}
+	h, err := s.Store.History(ctx, current)
+	if err != nil || len(h.Handoffs) != 1 || h.Handoffs[0].Agent != "agy" {
+		t.Fatal("expected recorded handoff for agy", h.Handoffs, err)
+	}
+	if p.Snapshot(false).State != term.Exited {
+		t.Fatalf("expected outgoing pane to exit, got %v", p.Snapshot(false).State)
+	}
+}
+
+func TestSwitchForceWhenOutgoingCannotResume(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	ctx := contextTestContext(t)
+	if _, err := s.Store.StartSession(ctx, task, "", time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Switch(ctx, task, "agy", 80, 24, false); !errors.Is(err, core.ErrHandoffFailed) {
+		t.Fatalf("expected ErrHandoffFailed, got %v", err)
+	}
+	p, err := r.SwitchForce(ctx, task, "agy", 80, 24, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready agy new")
+	current, err := s.Find(ctx, task.Slug)
+	if err != nil || current.Agent != "agy" {
+		t.Fatal(current, err)
+	}
+}
+
+func TestSwitchForceStillRequiresFreshConfirmation(t *testing.T) {
+	s, r, task := contextRuntime(t)
+	ctx := contextTestContext(t)
+	target := task
+	target.Agent = "agy"
+	if _, err := s.Store.StartSession(ctx, target, "", time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.SwitchForce(ctx, task, "agy", 80, 24, false); !errors.Is(err, core.ErrFreshStartRequired) {
+		t.Fatalf("expected ErrFreshStartRequired, got %v", err)
+	}
+	p, err := r.SwitchForce(ctx, task, "agy", 80, 24, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitPane(t, p, term.Done, "ready agy new")
 }
 
 func contextTestContext(t *testing.T) context.Context {

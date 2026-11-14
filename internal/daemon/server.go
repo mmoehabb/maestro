@@ -275,9 +275,12 @@ func (s *Server) handle(ctx context.Context, req request) (any, error) {
 		var pane *term.Pane
 		switch {
 		case req.Method == "switch":
-			if a.Fresh {
+			switch {
+			case a.Force:
+				pane, err = r.SwitchForce(ctx, task, a.Text, a.Cols, a.Rows, a.Fresh)
+			case a.Fresh:
 				pane, err = r.SwitchFresh(ctx, task, a.Text, a.Cols, a.Rows, a.Confirmed)
-			} else {
+			default:
 				pane, err = r.Switch(ctx, task, a.Text, a.Cols, a.Rows, a.Confirmed)
 			}
 		case a.Ensure && !a.Fresh:

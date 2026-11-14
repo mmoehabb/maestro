@@ -15,6 +15,7 @@ type Runtime interface {
 	Start(store.Task, int, int, bool) (*term.Pane, error)
 	Switch(context.Context, store.Task, string, int, int, bool) (*term.Pane, error)
 	SwitchFresh(context.Context, store.Task, string, int, int, bool) (*term.Pane, error)
+	SwitchForce(context.Context, store.Task, string, int, int, bool) (*term.Pane, error)
 	Create(context.Context, core.NewTask) (store.Task, error)
 	Workflow(context.Context, store.Task, string, core.WorkflowOptions) (store.Task, error)
 	Archive(context.Context, store.Task) error

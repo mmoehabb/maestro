@@ -92,6 +92,9 @@ func result(value any, err error) response {
 		if errors.Is(err, core.ErrInterruptRequired) {
 			code = "busy"
 		}
+		if errors.Is(err, core.ErrHandoffFailed) {
+			code = "handoff"
+		}
 		return response{Error: err.Error(), Code: code}
 	}
 	data, e := json.Marshal(value)
@@ -110,6 +113,8 @@ func responseError(r response) error {
 		return fmt.Errorf("%s: %w", r.Error, core.ErrFreshStartRequired)
 	case "busy":
 		return fmt.Errorf("%s: %w", r.Error, core.ErrInterruptRequired)
+	case "handoff":
+		return fmt.Errorf("%s: %w", r.Error, core.ErrHandoffFailed)
 	}
 	return errors.New(r.Error)
 }
@@ -141,6 +146,11 @@ func (r Remote) call(ctx context.Context, req request, out any) error {
 	for {
 		var reply response
 		if err = decode(conn, &reply); err != nil {
+			// Closing the connection on cancellation or timeout is expected;
+			// expose the cause so callers can react to it.
+			if cause := ctx.Err(); cause != nil {
+				return fmt.Errorf("daemon request interrupted (operation may have completed; inspect state before retrying): %w", cause)
+			}
 			return fmt.Errorf("daemon connection lost (operation may have completed; inspect state before retrying): %w", err)
 		}
 		if reply.Prompt != "" {

@@ -302,17 +302,31 @@ var ErrFreshStartRequired = errors.New("no native session ID found; confirm a fr
 
 var ErrInterruptRequired = errors.New("agent is active; confirm interruption to switch")
 
+var ErrHandoffFailed = errors.New("outgoing agent did not produce a handoff")
+
+// handoffDoneGrace is how long the outgoing agent may stay Done after the
+// handoff request without writing the file before the switch reports
+// ErrHandoffFailed. It exceeds the idle heuristic so silent thinking in agents
+// without native turn signals is not mistaken for a finished turn.
+var handoffDoneGrace = 10 * time.Second
+
 func (r *Runtime) Switch(ctx context.Context, task store.Task, target string, cols, rows int, _ bool) (*term.Pane, error) {
-	return r.switchAgent(ctx, task, target, cols, rows, false)
+	return r.switchAgent(ctx, task, target, cols, rows, false, false)
 }
 
 // SwitchFresh explicitly starts the selected target with the saved handoff.
 // The outgoing agent finishes its current turn before generating the handoff.
 func (r *Runtime) SwitchFresh(ctx context.Context, task store.Task, target string, cols, rows int, _ bool) (*term.Pane, error) {
-	return r.switchAgent(ctx, task, target, cols, rows, true)
+	return r.switchAgent(ctx, task, target, cols, rows, true, false)
 }
 
-func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target string, cols, rows int, fresh bool) (*term.Pane, error) {
+// SwitchForce stops the outgoing agent without asking it for a handoff and
+// starts the target with a Maestro-generated brief built from saved history.
+func (r *Runtime) SwitchForce(ctx context.Context, task store.Task, target string, cols, rows int, fresh bool) (*term.Pane, error) {
+	return r.switchAgent(ctx, task, target, cols, rows, fresh, true)
+}
+
+func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target string, cols, rows int, fresh, force bool) (*term.Pane, error) {
 	done, err := r.operation(task.ID)
 	if err != nil {
 		return nil, err
@@ -366,7 +380,7 @@ func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target strin
 	if pending.ID != 0 && r.entry(task.ID) != nil && pending.FromSession != r.entry(task.ID).session.ID {
 		pending = store.Handoff{}
 	}
-	if pending.ID == 0 {
+	if pending.ID == 0 && !force {
 		old := r.entry(task.ID)
 		if old == nil {
 			previous, e := r.Service.Store.LatestAgentSession(op, task.ID, task.Agent)
@@ -386,7 +400,7 @@ func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target strin
 				return r.start(op, candidate, cols, rows, fresh, nil)
 			}
 			if previous.NativeID == "" {
-				return nil, fmt.Errorf("cannot generate handoff: outgoing conversation cannot be resumed")
+				return nil, fmt.Errorf("cannot generate handoff: outgoing conversation cannot be resumed: %w", ErrHandoffFailed)
 			}
 			if _, e = r.start(op, task, cols, rows, false, nil); e != nil {
 				return nil, e
@@ -403,6 +417,9 @@ func (r *Runtime) switchAgent(ctx context.Context, task store.Task, target strin
 		if e = r.Service.Store.PrepareHandoff(op, task.ID, old.session.ID, target, content); e != nil {
 			return nil, e
 		}
+	}
+	if force {
+		r.emit(Event{TaskID: task.ID, Progress: "Force switching · building handoff from saved history"})
 	}
 	if old := r.entry(task.ID); old != nil {
 		old.pane.Stop()
@@ -805,7 +822,7 @@ func (r *Runtime) agentHandoff(ctx context.Context, old *running) (string, error
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-old.finished:
-			return fmt.Errorf("outgoing agent exited before completing handoff")
+			return fmt.Errorf("outgoing agent exited before completing handoff: %w", ErrHandoffFailed)
 		case <-ticker.C:
 			return nil
 		}
@@ -823,12 +840,22 @@ func (r *Runtime) agentHandoff(ctx context.Context, old *running) (string, error
 	}
 	defer os.Remove(filepath.Join(old.task.Worktree, marker))
 	defer os.Remove(path)
-	r.emit(Event{TaskID: old.task.ID, Progress: "Writing handoff · ctrl+g cancels switch"})
+	r.emit(Event{TaskID: old.task.ID, Progress: "Writing handoff · ctrl+g cancels (force switch available)"})
+	// Snapshot the activity revision before the request: it increments on every
+	// state change, so a quick Working→Done turn between polls is still seen.
+	requested := old.pane.Snapshot(false).Revision
 	old.pane.Paste(fmt.Sprintf("Wrap up this conversation for the next agent. Write your goal, decisions, completed work, outstanding work, tests, blockers and next steps to %s. Write the complete file atomically, then finish this turn and remain available.", path))
 	old.pane.Key(uv.Key{Code: 13}, false)
+	var doneSince time.Time
 	for {
 		if err := wait(); err != nil {
 			return "", err
+		}
+		snapshot := old.pane.Snapshot(false)
+		state := snapshot.State
+		turnEnded := state == term.Done && snapshot.Revision != requested
+		if !turnEnded {
+			doneSince = time.Time{}
 		}
 		for _, parent := range []string{".maestro", filepath.Join(".maestro", "local")} {
 			info, err := os.Lstat(filepath.Join(old.task.Worktree, parent))
@@ -841,15 +868,25 @@ func (r *Runtime) agentHandoff(ctx context.Context, old *running) (string, error
 		}
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
+			// Agents that reply with an error (no credits, rate limits, logged
+			// out) end the turn without writing the file. Report it so the
+			// caller can offer a forced switch instead of waiting forever.
+			if turnEnded {
+				if doneSince.IsZero() {
+					doneSince = time.Now()
+				} else if time.Since(doneSince) >= handoffDoneGrace {
+					return "", fmt.Errorf("outgoing agent finished its turn without writing a handoff: %w", ErrHandoffFailed)
+				}
+			}
 			continue
 		}
 		if err != nil {
 			return "", err
 		}
 		if !info.Mode().IsRegular() {
-			return "", fmt.Errorf("handoff must be a regular file")
+			return "", fmt.Errorf("handoff must be a regular file: %w", ErrHandoffFailed)
 		}
-		if old.pane.Snapshot(false).State != term.Done {
+		if state != term.Done {
 			continue
 		}
 		content, err := os.ReadFile(path)
@@ -857,7 +894,7 @@ func (r *Runtime) agentHandoff(ctx context.Context, old *running) (string, error
 			return "", err
 		}
 		if strings.TrimSpace(string(content)) == "" {
-			return "", fmt.Errorf("agent wrote an empty handoff")
+			return "", fmt.Errorf("agent wrote an empty handoff: %w", ErrHandoffFailed)
 		}
 		return string(content), nil
 	}

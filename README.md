@@ -1,6 +1,6 @@
 # Maestro
 
-**tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code, Cursor Agent, Crush, Kilo, Gemini CLI, GitHub Copilot CLI and Aider side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
+**tmux for coding agents.** Run Codex, agy, OpenCode, Claude Code, Qoder, Kimi Code, Cursor Agent, Crush, Kilo, Gemini CLI, GitHub Copilot CLI, Aider, Cline, Qwen Code, Pi, Mistral Vibe, Goose, Kiro, Factory Droid and Auggie side by side in tabs. Each tab is a task with its own git worktree that becomes a PR, and Maestro keeps the history so you can switch agents without losing context.
 
 ## Install (from source)
 
@@ -278,10 +278,18 @@ Built-in presets are available in the new-task picker and through `maestro new -
 | `gemini` | `gemini` | Discovered from saved project session metadata |
 | `copilot` | `copilot` | Maestro supplies a UUID using `--session-id` |
 | `aider` | `aider` | Per-session chat history file; manual prompts |
+| `cline` | `cline` | Discovered from `~/.cline/data/db/sessions.db` or session manifests; manual prompts (`--tui`) |
+| `qwen` | `qwen` | Discovered from `~/.qwen/projects/*/chats/*.jsonl` |
+| `pi` | `pi` | Discovered from `~/.pi/agent/sessions/**/*.jsonl` |
+| `vibe` | `vibe` | Discovered from `~/.vibe/logs/session/*/meta.json`; manual prompts |
+| `goose` | `goose` | Discovered from `goose session list --format json` or `sessions.db`; manual prompts |
+| `kiro` | `kiro-cli` | Discovered from `~/.kiro/sessions/cli` or `data.sqlite3`; manual prompts |
+| `droid` | `droid` | Discovered from `~/.factory/sessions/**/*.jsonl`; manual prompts |
+| `auggie` | `auggie` | Discovered from `auggie session list --json`; manual prompts |
 
 Install and authenticate the chosen CLI separately; `maestro doctor` checks executable availability. Override the preset's `cmd` if your installation uses another executable name, such as `agent` for Cursor or `qodercli` for older Qoder installations. The argument flags must also be supported by that version.
 
-Claude and Cursor accept an initial prompt while remaining interactive. Qoder uses [`--prompt-interactive`](https://docs.qoder.com/cli/cli-reference). Kimi's [`--prompt`](https://github.com/MoonshotAI/kimi-code/blob/main/docs/en/reference/kimi-command.md) runs non-interactively with automatic approvals, so its preset requires manual prompt entry: omit Maestro's `-p` (leave the dialog's first prompt blank) and enter the prompt in the agent pane. Maestro rejects launch-time prompts for this preset before creating a worktree. The Kimi preset targets the current Kimi Code CLI and its `.kimi-code` session layout, not the older Python CLI's `.kimi` storage. Cursor session allocation uses its documented [`create-chat`](https://cursor.com/docs/cli/reference/parameters) command.
+Claude, Cursor and Pi accept an initial prompt while remaining interactive. Qoder, Gemini and Qwen Code use `--prompt-interactive` ([Qoder CLI reference](https://docs.qoder.com/cli/cli-reference)). Copilot uses `--interactive` and requires a version supporting `--session-id`. Kimi's [`--prompt`](https://github.com/MoonshotAI/kimi-code/blob/main/docs/en/reference/kimi-command.md) runs non-interactively with automatic approvals, and Cline runs positional prompts in one-shot auto-approve mode (`--tui` keeps it interactive). Crush (including Hyper configurations), Kilo, Aider, Cline, Mistral Vibe, Goose, Kiro, Factory Droid and Auggie use manual prompt entry: start without `-p` (leave the dialog's first prompt blank) and type in the agent pane, using `prefix H` to copy handoffs. Maestro rejects launch-time prompts for `manual_prompt = true` presets before creating a worktree. The Kimi preset targets the current Kimi Code CLI and its `.kimi-code` session layout, not the older Python CLI's `.kimi` storage. Cursor session allocation uses its documented [`create-chat`](https://cursor.com/docs/cli/reference/parameters) command. Aider restores history from `.maestro/local/aider-<session-id>.history.md`. All generic presets without native adapters use terminal history and heuristic activity detection.
 
 Maestro saves native session IDs and resumes by ID without replaying the first prompt. Codex, agy and OpenCode also import native messages and tool activity. Private formats can change; parser failures retain existing history and fall back to terminal capture. If an existing resumable task has no discoverable ID, Maestro shows an error and offers `prefix R` for an explicit fresh start.
 
@@ -481,10 +489,3 @@ Linux terminal smoke tests and Windows/macOS cross-builds have been performed. R
 ## License
 
 [MIT](LICENSE)
-
-Crush (including Hyper configurations), Kilo and Aider use manual prompt entry:
-start without `-p`, then type in the pane. Use `prefix H` to copy handoffs.
-Gemini uses `--prompt-interactive`; Copilot uses `--interactive` and requires
- a version supporting `--session-id`. Install and authenticate each CLI separately.
-Aider restores history from `.maestro/local/aider-<session-id>.history.md`.
-These agents use terminal history and heuristic activity detection.

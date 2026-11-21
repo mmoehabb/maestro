@@ -322,3 +322,9 @@ code, kbd { font-family: var(--mono); }
 .agent-icon-copilot { --agent-icon: url("./assets/icons/copilot.svg"); }
 .agent-icon-aider { --agent-icon: url("./assets/icons/aider.svg"); }
 .agent-icon-aider { width: 64px; }
+.agent-icon-cline { --agent-icon: url("./assets/icons/cline.svg"); }
+.agent-icon-qwen { --agent-icon: url("./assets/icons/qwen.svg"); }
+.agent-icon-pi { --agent-icon: url("./assets/icons/pi.svg"); }
+.agent-icon-vibe { --agent-icon: url("./assets/icons/vibe.svg"); }
+.agent-icon-goose { --agent-icon: url("./assets/icons/goose.svg"); }
+.agent-icon-kiro { --agent-icon: url("./assets/icons/kiro.svg"); }

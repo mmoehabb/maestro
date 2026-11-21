@@ -101,3 +101,51 @@ generate_session_id = true
 manual_prompt = true
 new = ["--chat-history-file", ".maestro/local/aider-{{.SessionID}}.history.md", "--no-restore-chat-history"]
 resume = ["--chat-history-file", ".maestro/local/aider-{{.SessionID}}.history.md", "--restore-chat-history"]
+
+[agents.cline]
+cmd = "cline"
+# Positional prompts run one-shot mode with auto-approval enabled.
+manual_prompt = true
+new = ["--tui"]
+resume = ["--tui", "--id", "{{.SessionID}}"]
+
+[agents.qwen]
+cmd = "qwen"
+new = ["{{if .Prompt}}--prompt-interactive{{end}}", "{{.Prompt}}"]
+resume = ["--resume", "{{.SessionID}}", "{{if .Prompt}}--prompt-interactive{{end}}", "{{.Prompt}}"]
+
+[agents.pi]
+cmd = "pi"
+new = ["{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+resume = ["--session", "{{.SessionID}}", "{{if .Prompt}}--{{end}}", "{{.Prompt}}"]
+
+[agents.vibe]
+cmd = "vibe"
+# --resume and positional prompts are mutually exclusive.
+manual_prompt = true
+new = []
+resume = ["--resume", "{{.SessionID}}"]
+
+[agents.goose]
+cmd = "goose"
+manual_prompt = true
+new = ["session"]
+resume = ["session", "--resume", "--session-id", "{{.SessionID}}"]
+
+[agents.kiro]
+cmd = "kiro-cli"
+manual_prompt = true
+new = ["chat"]
+resume = ["chat", "--resume-id", "{{.SessionID}}"]
+
+[agents.droid]
+cmd = "droid"
+manual_prompt = true
+new = []
+resume = ["--resume", "{{.SessionID}}"]
+
+[agents.auggie]
+cmd = "auggie"
+manual_prompt = true
+new = []
+resume = ["--resume", "{{.SessionID}}"]

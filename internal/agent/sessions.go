@@ -224,6 +224,22 @@ func (g Generic) DiscoverSession(ctx context.Context, dir string, since time.Tim
 			}
 		}
 		return id, nil
+	case "cline":
+		return discoverCline(ctx, home, dir, since)
+	case "qwen":
+		return discoverQwen(ctx, home, dir, since)
+	case "pi":
+		return discoverPi(ctx, home, dir, since)
+	case "vibe":
+		return discoverVibe(ctx, home, dir, since)
+	case "goose":
+		return discoverGoose(ctx, g.Config.Cmd, home, dir, since)
+	case "kiro":
+		return discoverKiro(ctx, home, dir, since)
+	case "droid":
+		return discoverDroid(ctx, home, dir, since)
+	case "auggie":
+		return discoverAuggie(ctx, g.Config.Cmd, dir, since)
 	}
 	return "", nil
 }

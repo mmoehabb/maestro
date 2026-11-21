@@ -17,7 +17,7 @@ import (
 	"github.com/mmoehabb/maestro/internal/config"
 )
 
-func isolateAgentTestEnv(t *testing.T) string {
+func isolateAgentTestEnv(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	for _, key := range []string{
@@ -30,7 +30,6 @@ func isolateAgentTestEnv(t *testing.T) string {
 	}
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	return home
 }
 
 func TestGeminiDiscoveryMatchesProject(t *testing.T) {
